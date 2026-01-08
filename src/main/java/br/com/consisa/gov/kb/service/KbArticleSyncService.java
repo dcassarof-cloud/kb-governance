@@ -23,37 +23,41 @@ import java.time.temporal.ChronoField;
 import java.util.List;
 
 /**
- * Serviço responsável por sincronizar artigos da KB do Movidesk
- * para o banco local, mantendo:
- * - conteúdo (HTML / texto)
- * - metadados (status, slug, revisionId, datas)
- * - auditoria da fonte (sourceUrl, sourceMenuId, sourceMenuName)
- * - classificação por sistema (KbSystem)
+ * Serviço responsável por sincronizar artigos da KB do Movidesk para o banco local.
  *
- * Governança via issues (kb_sync_issue):
- * - syncAll() nunca pode cair por causa de 1 artigo
- * - 404 vira issue NOT_FOUND (não fatal)
- * - menu null vira issue MENU_NULL (não tenta adivinhar)
- * - menu não mapeado vira issue MENU_NOT_MAPPED
- * - conteúdo vazio vira issue EMPTY_CONTENT (métrica)
- * - qualquer exceção vira issue ERROR
+ * PERFORMANCE / MODOS:
+ * - FULL: varre tudo via searchArticles e baixa cada artigo via getArticleById
+ * - DELTA_WINDOW: não varre o Movidesk inteiro; sincroniza apenas uma janela de tempo (do DB)
  *
- * Regra importante:
- * - NÃO criar "stub" em kb_article só pra registrar erro.
- * - Se kb_article existir, atualiza syncStatus/syncErrorMessage; se não existir, só cria issue.
+ * Por que DELTA_WINDOW?
+ * - Seu MovideskArticleSearchItemDto NÃO tem updatedDate/revisionId.
+ * - Então o search não permite decidir se mudou.
+ * - Melhor ganho: usar seu próprio banco pra reduzir o universo.
  */
 @Service
-public class    KbArticleSyncService {
+public class KbArticleSyncService {
 
     private static final Logger log = LoggerFactory.getLogger(KbArticleSyncService.class);
 
-    // Status locais (em kb_article) - usado só quando o artigo já existe localmente
+    // Status locais (em kb_article)
     private static final String SYNC_OK = "OK";
     private static final String SYNC_NOT_FOUND = "NOT_FOUND";
     private static final String SYNC_ERROR = "ERROR";
 
-    // Governança mínima (para não quebrar constraint nullable=false em inserts reais)
+    // Governança mínima (para inserts)
     private static final String GOV_PENDING = "PENDING";
+
+    // Fonte oficial do menu map
+    private static final String SOURCE_SYSTEM = "movidesk";
+
+    /**
+     * FULL: varre tudo e baixa tudo
+     * DELTA_WINDOW: sincroniza só uma janela recente (rápido)
+     */
+    public enum SyncMode {
+        FULL,
+        DELTA_WINDOW
+    }
 
     private final MovideskClient movideskClient;
     private final KbArticleRepository repository;
@@ -113,6 +117,7 @@ public class    KbArticleSyncService {
     protected void openNotFoundIssue(long articleId, String msg) {
         issueService.open(articleId, KbSyncIssueType.NOT_FOUND, msg);
 
+        // Se existir no banco, marca status técnico (sem criar stub)
         repository.findById(articleId).ifPresent(a -> {
             a.setSyncStatus(SYNC_NOT_FOUND);
             a.setSyncErrorMessage(truncate(msg, 400));
@@ -132,7 +137,7 @@ public class    KbArticleSyncService {
     }
 
     /* =========================================================
-       SYNC DE ARTIGO INDIVIDUAL (GET /article/{id})
+       SYNC INDIVIDUAL (GET /article/{id})
        ========================================================= */
 
     @Transactional
@@ -158,6 +163,7 @@ public class    KbArticleSyncService {
             throw new IllegalStateException("Movidesk retornou artigo sem id (null) para articleId=" + articleId);
         }
 
+        // update se existe, insert se não existe
         KbArticle entity = repository.findById(dto.getId()).orElseGet(KbArticle::new);
 
         // metadados
@@ -176,13 +182,11 @@ public class    KbArticleSyncService {
         entity.setUpdatedDate(parseMovi(dto.getUpdatedDate()));
 
         // origem/auditoria
-        entity.setSourceSystem("movidesk");
+        entity.setSourceSystem(SOURCE_SYSTEM);
         entity.setFetchedAt(OffsetDateTime.now(ZoneOffset.UTC));
 
         String slug = (dto.getSlug() == null) ? "" : dto.getSlug();
-        entity.setSourceUrl(
-                "https://consisanet.movidesk.com/kb/pt-br/article/" + dto.getId() + "/" + slug
-        );
+        entity.setSourceUrl("https://consisanet.movidesk.com/kb/pt-br/article/" + dto.getId() + "/" + slug);
 
         // menu (endpoint completo)
         if (dto.getMenu() != null) {
@@ -212,18 +216,42 @@ public class    KbArticleSyncService {
     }
 
     /* =========================================================
-       SYNC GERAL + CLASSIFICAÇÃO (kb_menu_map)
+       SYNC ALL (FULL / DELTA_WINDOW)
        ========================================================= */
 
+    /**
+     * Atalho: por padrão, roda DELTA_WINDOW (mais rápido)
+     */
     public void syncAll() {
+        syncAll(SyncMode.DELTA_WINDOW, 2);
+    }
+
+    /**
+     * FULL: varre Movidesk inteiro (search + get por id)
+     * DELTA_WINDOW: sincroniza apenas uma janela recente do DB (diasBack)
+     */
+    public void syncAll(SyncMode mode, int daysBack) {
+        if (mode == SyncMode.FULL) {
+            syncAllFull();
+            return;
+        }
+
+        // ✅ delta via banco: últimos X dias
+        syncAllDeltaWindow(daysBack);
+    }
+
+    /**
+     * FULL: varre tudo do Movidesk.
+     */
+    public void syncAllFull() {
         int page = 0;
-        int pageSize = 30;
+        int pageSize = 50;
         Integer totalSize = null;
 
         KbSystem geral = getSystemOrThrow("GERAL");
-        final String sourceSystem = "movidesk";
+        Long geralId = geral.getId(); // evita lazy em log/compare
 
-        log.info("🚀 syncAll iniciado. pageSize={}", pageSize);
+        log.info("🚀 syncAll FULL iniciado. pageSize={}", pageSize);
 
         while (true) {
             try {
@@ -245,54 +273,11 @@ public class    KbArticleSyncService {
                     if (id == null) continue;
 
                     try {
-                        // 1) sincroniza conteúdo completo
                         KbArticle saved = sync(id);
                         if (saved == null) continue;
 
-                        // 2) menu vindo do SEARCH
-                        Long menuId = safeMenuId(item);
-                        String menuName = safeMenuName(item);
+                        classifyUsingMenuMap(saved, item, geral, geralId);
 
-                        // 3) resolve sistema via kb_menu_map
-                        KbSystem system;
-
-                        if (menuId == null) {
-                            issueService.open(id, KbSyncIssueType.MENU_NULL,
-                                    "Menu veio null no search do Movidesk");
-                            system = geral;
-                        } else {
-                            var mapOpt = menuMapService.findActive(sourceSystem, menuId);
-                            if (mapOpt.isPresent()) {
-                                system = mapOpt.get().getSystem();
-                            } else {
-                                issueService.open(id, KbSyncIssueType.MENU_NOT_MAPPED,
-                                        "Menu não mapeado. source_menu_id=" + menuId +
-                                                " source_menu_name='" + truncate(menuName, 150) + "'");
-                                system = geral;
-                            }
-                        }
-
-                        // 4) persiste classificação + auditoria
-                        saved.setSystem(system);
-                        if (menuId != null) saved.setSourceMenuId(menuId);
-                        if (menuName != null && !menuName.isBlank()) saved.setSourceMenuName(menuName);
-
-                        if (saved.getGovernanceStatus() == null || saved.getGovernanceStatus().isBlank()) {
-                            saved.setGovernanceStatus(GOV_PENDING);
-                        }
-
-                        repository.save(saved);
-
-                        String systemCode = (system == null ? "NULL" : system.getCode());
-
-                        if ("GERAL".equals(systemCode)) {
-                            log.warn("🧭 Caiu em GERAL. id={} menuId={} menuRaw='{}'",
-                                    id, menuId, menuName);
-                        }
-
-                        log.info("✅ classificado id={} menuId={} menu='{}' system={}",
-                                id, menuId, menuName, systemCode
-                        );
                     } catch (Exception e) {
                         log.error("❌ erro ao sincronizar/classificar id={}", id, e);
                         openErrorIssue(id, truncate(e.getMessage(), 400));
@@ -303,13 +288,153 @@ public class    KbArticleSyncService {
                 if (totalSize != null && page * pageSize >= totalSize) break;
 
             } catch (Exception ex) {
-                log.error("❌ Falha no searchArticles page={}. Encerrando syncAll. motivo={}",
+                log.error("❌ Falha no searchArticles page={}. Encerrando FULL. motivo={}",
                         page, ex.toString(), ex);
                 break;
             }
         }
 
-        log.info("🏁 syncAll finalizado.");
+        log.info("🏁 syncAll FULL finalizado.");
+    }
+
+    /**
+     * DELTA_WINDOW: sincroniza apenas artigos "recentes" do banco local.
+     *
+     * Estratégia:
+     * - pega ids que foram atualizados recentemente (updatedDate) OU buscados recentemente (fetchedAt)
+     * - re-sincroniza esses ids (pega conteúdo e atualiza)
+     *
+     * Resultado:
+     * - não precisa varrer Movidesk inteiro
+     * - ótimo pra rodar de X em X minutos
+     */
+    public void syncAllDeltaWindow(int daysBack) {
+        if (daysBack <= 0) daysBack = 1;
+
+        OffsetDateTime since = OffsetDateTime.now(ZoneOffset.UTC).minusDays(daysBack);
+
+        log.info("🚀 syncAll DELTA_WINDOW iniciado. daysBack={} since={}", daysBack, since);
+
+        // ✅ Você precisa de um repo method pra isso (te passo abaixo).
+        List<Long> ids = repository.findIdsForDeltaSince(since);
+
+        log.info("🧩 DELTA_WINDOW ids para sync: {}", ids.size());
+
+        KbSystem geral = getSystemOrThrow("GERAL");
+        Long geralId = geral.getId();
+
+        for (Long id : ids) {
+            if (id == null) continue;
+
+            try {
+                KbArticle saved = sync(id);
+                if (saved == null) continue;
+
+                // No delta via banco, a gente não tem o "item" do SEARCH (menu pode vir no GET dto)
+                // Então classificamos pelo menu que já está no saved (sourceMenuId/sourceMenuName)
+                classifyUsingSavedMenu(saved, geral, geralId);
+
+            } catch (Exception e) {
+                log.error("❌ erro ao sincronizar/classificar (DELTA_WINDOW) id={}", id, e);
+                openErrorIssue(id, truncate(e.getMessage(), 400));
+            }
+        }
+
+        log.info("🏁 syncAll DELTA_WINDOW finalizado.");
+    }
+
+    /* =========================================================
+       CLASSIFICAÇÃO (kb_menu_map)
+       ========================================================= */
+
+    /**
+     * Classifica usando o menu vindo do SEARCH (quando estamos no FULL).
+     */
+    private void classifyUsingMenuMap(KbArticle saved,
+                                      MovideskArticleSearchItemDto item,
+                                      KbSystem geral,
+                                      Long geralId) {
+
+        Long id = saved.getId();
+
+        Long menuId = safeMenuId(item);
+        String menuName = safeMenuName(item);
+
+        KbSystem system = resolveSystemFromMenu(menuId, menuName, id, geral);
+
+        // persiste classificação + auditoria
+        saved.setSystem(system);
+        if (menuId != null) saved.setSourceMenuId(menuId);
+        if (menuName != null && !menuName.isBlank()) saved.setSourceMenuName(menuName);
+
+        if (saved.getGovernanceStatus() == null || saved.getGovernanceStatus().isBlank()) {
+            saved.setGovernanceStatus(GOV_PENDING);
+        }
+
+        repository.save(saved);
+
+        Long systemId = (system == null ? null : system.getId());
+        boolean caiuEmGeral = (systemId == null) || (geralId != null && geralId.equals(systemId));
+
+        if (caiuEmGeral) {
+            log.warn("🧭 Caiu em GERAL. id={} menuId={} menuRaw='{}'", id, menuId, menuName);
+        }
+
+        log.info("✅ classificado id={} menuId={} menu='{}' systemId={}",
+                id, menuId, menuName, systemId);
+    }
+
+    /**
+     * Classifica usando o menu já salvo no próprio artigo (bom pro DELTA_WINDOW).
+     */
+    private void classifyUsingSavedMenu(KbArticle saved, KbSystem geral, Long geralId) {
+        Long id = saved.getId();
+
+        Long menuId = saved.getSourceMenuId();
+        String menuName = saved.getSourceMenuName();
+
+        KbSystem system = resolveSystemFromMenu(menuId, menuName, id, geral);
+
+        saved.setSystem(system);
+
+        if (saved.getGovernanceStatus() == null || saved.getGovernanceStatus().isBlank()) {
+            saved.setGovernanceStatus(GOV_PENDING);
+        }
+
+        repository.save(saved);
+
+        Long systemId = (system == null ? null : system.getId());
+        boolean caiuEmGeral = (systemId == null) || (geralId != null && geralId.equals(systemId));
+
+        if (caiuEmGeral) {
+            log.warn("🧭 (DELTA) Caiu em GERAL. id={} menuId={} menuRaw='{}'", id, menuId, menuName);
+        }
+
+        log.info("✅ (DELTA) classificado id={} menuId={} menu='{}' systemId={}",
+                id, menuId, menuName, systemId);
+    }
+
+    /**
+     * Resolve sistema usando kb_menu_map.
+     * - menuId null => issue MENU_NULL e GERAL
+     * - menuId sem map => issue MENU_NOT_MAPPED e GERAL
+     */
+    private KbSystem resolveSystemFromMenu(Long menuId, String menuName, Long articleId, KbSystem geral) {
+        if (menuId == null) {
+            issueService.open(articleId, KbSyncIssueType.MENU_NULL,
+                    "Menu veio null (sem source_menu_id)");
+            return geral;
+        }
+
+        var mapOpt = menuMapService.findActive(SOURCE_SYSTEM, menuId);
+        if (mapOpt.isPresent()) {
+            return mapOpt.get().getSystem();
+        }
+
+        issueService.open(articleId, KbSyncIssueType.MENU_NOT_MAPPED,
+                "Menu não mapeado. source_menu_id=" + menuId +
+                        " source_menu_name='" + truncate(menuName, 150) + "'");
+        return geral;
     }
 
     /* =========================================================
@@ -338,7 +463,7 @@ public class    KbArticleSyncService {
     }
 
     /* =========================================================
-       OPERAÇÕES AUXILIARES
+       AUXILIARES
        ========================================================= */
 
     @Transactional

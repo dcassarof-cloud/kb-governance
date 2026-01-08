@@ -42,7 +42,7 @@ public class KbMenuMapService {
         if (sourceSystem == null || sourceSystem.isBlank()) return Optional.empty();
         if (sourceMenuId == null) return Optional.empty();
 
-        return repository.findFirstBySourceSystemAndSourceMenuIdAndActiveTrue(
+        return repository.findBySourceSystemAndSourceMenuIdAndActiveTrue(
                 sourceSystem,
                 sourceMenuId
         );
