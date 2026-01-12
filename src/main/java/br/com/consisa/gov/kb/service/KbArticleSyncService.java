@@ -27,12 +27,7 @@ import java.util.List;
  *
  * PERFORMANCE / MODOS:
  * - FULL: varre tudo via searchArticles e baixa cada artigo via getArticleById
- * - DELTA_WINDOW: não varre o Movidesk inteiro; sincroniza apenas uma janela de tempo (do DB)
- *
- * Por que DELTA_WINDOW?
- * - Seu MovideskArticleSearchItemDto NÃO tem updatedDate/revisionId.
- * - Então o search não permite decidir se mudou.
- * - Melhor ganho: usar seu próprio banco pra reduzir o universo.
+ * - DELTA_WINDOW: sincroniza apenas uma janela de tempo (do DB)
  */
 @Service
 public class KbArticleSyncService {
@@ -121,6 +116,11 @@ public class KbArticleSyncService {
         repository.findById(articleId).ifPresent(a -> {
             a.setSyncStatus(SYNC_NOT_FOUND);
             a.setSyncErrorMessage(truncate(msg, 400));
+
+            // ✅ NOVO: marca como "morto" pra sair do ciclo de DELTA_WINDOW
+            a.setSyncState("MISSING");
+            a.setLastSeenAt(OffsetDateTime.now(ZoneOffset.UTC));
+
             repository.save(a);
         });
     }
@@ -226,30 +226,21 @@ public class KbArticleSyncService {
         syncAll(SyncMode.DELTA_WINDOW, 2);
     }
 
-    /**
-     * FULL: varre Movidesk inteiro (search + get por id)
-     * DELTA_WINDOW: sincroniza apenas uma janela recente do DB (diasBack)
-     */
     public void syncAll(SyncMode mode, int daysBack) {
         if (mode == SyncMode.FULL) {
             syncAllFull();
             return;
         }
-
-        // ✅ delta via banco: últimos X dias
         syncAllDeltaWindow(daysBack);
     }
 
-    /**
-     * FULL: varre tudo do Movidesk.
-     */
     public void syncAllFull() {
         int page = 0;
         int pageSize = 50;
         Integer totalSize = null;
 
         KbSystem geral = getSystemOrThrow("GERAL");
-        Long geralId = geral.getId(); // evita lazy em log/compare
+        Long geralId = geral.getId();
 
         log.info("🚀 syncAll FULL iniciado. pageSize={}", pageSize);
 
@@ -299,14 +290,6 @@ public class KbArticleSyncService {
 
     /**
      * DELTA_WINDOW: sincroniza apenas artigos "recentes" do banco local.
-     *
-     * Estratégia:
-     * - pega ids que foram atualizados recentemente (updatedDate) OU buscados recentemente (fetchedAt)
-     * - re-sincroniza esses ids (pega conteúdo e atualiza)
-     *
-     * Resultado:
-     * - não precisa varrer Movidesk inteiro
-     * - ótimo pra rodar de X em X minutos
      */
     public void syncAllDeltaWindow(int daysBack) {
         if (daysBack <= 0) daysBack = 1;
@@ -315,7 +298,7 @@ public class KbArticleSyncService {
 
         log.info("🚀 syncAll DELTA_WINDOW iniciado. daysBack={} since={}", daysBack, since);
 
-        // ✅ Você precisa de um repo method pra isso (te passo abaixo).
+        // ✅ Agora a query ignora NOT_FOUND/MISSING e usa só updatedDate
         List<Long> ids = repository.findIdsForDeltaSince(since);
 
         log.info("🧩 DELTA_WINDOW ids para sync: {}", ids.size());
@@ -330,8 +313,11 @@ public class KbArticleSyncService {
                 KbArticle saved = sync(id);
                 if (saved == null) continue;
 
-                // No delta via banco, a gente não tem o "item" do SEARCH (menu pode vir no GET dto)
-                // Então classificamos pelo menu que já está no saved (sourceMenuId/sourceMenuName)
+                // marca visto/estado de execução do delta
+                saved.setLastSeenAt(OffsetDateTime.now(ZoneOffset.UTC));
+                saved.setSyncState("SYNCED");
+                repository.save(saved);
+
                 classifyUsingSavedMenu(saved, geral, geralId);
 
             } catch (Exception e) {
@@ -347,9 +333,6 @@ public class KbArticleSyncService {
        CLASSIFICAÇÃO (kb_menu_map)
        ========================================================= */
 
-    /**
-     * Classifica usando o menu vindo do SEARCH (quando estamos no FULL).
-     */
     private void classifyUsingMenuMap(KbArticle saved,
                                       MovideskArticleSearchItemDto item,
                                       KbSystem geral,
@@ -362,7 +345,6 @@ public class KbArticleSyncService {
 
         KbSystem system = resolveSystemFromMenu(menuId, menuName, id, geral);
 
-        // persiste classificação + auditoria
         saved.setSystem(system);
         if (menuId != null) saved.setSourceMenuId(menuId);
         if (menuName != null && !menuName.isBlank()) saved.setSourceMenuName(menuName);
@@ -384,9 +366,6 @@ public class KbArticleSyncService {
                 id, menuId, menuName, systemId);
     }
 
-    /**
-     * Classifica usando o menu já salvo no próprio artigo (bom pro DELTA_WINDOW).
-     */
     private void classifyUsingSavedMenu(KbArticle saved, KbSystem geral, Long geralId) {
         Long id = saved.getId();
 
@@ -414,11 +393,6 @@ public class KbArticleSyncService {
                 id, menuId, menuName, systemId);
     }
 
-    /**
-     * Resolve sistema usando kb_menu_map.
-     * - menuId null => issue MENU_NULL e GERAL
-     * - menuId sem map => issue MENU_NOT_MAPPED e GERAL
-     */
     private KbSystem resolveSystemFromMenu(Long menuId, String menuName, Long articleId, KbSystem geral) {
         if (menuId == null) {
             issueService.open(articleId, KbSyncIssueType.MENU_NULL,

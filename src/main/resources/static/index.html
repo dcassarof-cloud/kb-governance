@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <title>KB Governance - Sync Control</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 24px; max-width: 920px; }
+        .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin: 10px 0; }
+        input, select { padding: 8px; }
+        button { padding: 10px 14px; cursor:pointer; }
+        pre { background:#f6f6f6; padding: 12px; overflow:auto; }
+        .card { border:1px solid #ddd; padding: 14px; border-radius: 10px; margin-top: 12px; }
+    </style>
+</head>
+<body>
+<h1>KB Sync Control</h1>
+
+<div class="card">
+    <h3>Config</h3>
+    <div class="row">
+        <label><input type="checkbox" id="enabled"> enabled</label>
+
+        <label>mode:
+            <select id="mode">
+                <option value="DELTA_WINDOW">DELTA_WINDOW</option>
+                <option value="FULL">FULL</option>
+            </select>
+        </label>
+
+        <label>intervalMinutes:
+            <input id="intervalMinutes" type="number" min="1" value="60">
+        </label>
+
+        <label>daysBack:
+            <input id="daysBack" type="number" min="0" value="2">
+        </label>
+
+        <button onclick="loadConfig()">Recarregar</button>
+        <button onclick="saveConfig()">Salvar</button>
+    </div>
+
+    <div id="cfgMeta"></div>
+</div>
+
+<div class="card">
+    <h3>Run</h3>
+    <div class="row">
+        <button onclick="runNow('DELTA_WINDOW')">Rodar DELTA_WINDOW agora</button>
+        <button onclick="runNow('FULL')">Rodar FULL agora</button>
+        <button onclick="loadLatestRun()">Ver último run</button>
+    </div>
+    <pre id="out">...</pre>
+</div>
+
+<script>
+    async function http(url, opts) {
+        const res = await fetch(url, opts);
+        const text = await res.text();
+        let data = null;
+        try { data = text ? JSON.parse(text) : null; } catch {}
+        if (!res.ok) throw new Error((data && data.message) ? data.message : text || res.statusText);
+        return data;
+    }
+
+    async function loadConfig() {
+        const cfg = await http("/kb/sync/config");
+        document.getElementById("enabled").checked = !!cfg.enabled;
+        document.getElementById("mode").value = cfg.mode || "DELTA_WINDOW";
+        document.getElementById("intervalMinutes").value = cfg.intervalMinutes ?? 60;
+        document.getElementById("daysBack").value = cfg.daysBack ?? 2;
+
+        document.getElementById("cfgMeta").innerText =
+            `lastStartedAt=${cfg.lastStartedAt || "-"} | lastFinishedAt=${cfg.lastFinishedAt || "-"}`;
+    }
+
+    async function saveConfig() {
+        const body = {
+            enabled: document.getElementById("enabled").checked,
+            mode: document.getElementById("mode").value,
+            intervalMinutes: parseInt(document.getElementById("intervalMinutes").value, 10),
+            daysBack: parseInt(document.getElementById("daysBack").value, 10)
+        };
+        const saved = await http("/kb/sync/config", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body)
+        });
+        document.getElementById("out").innerText = JSON.stringify(saved, null, 2);
+        await loadConfig();
+    }
+
+    async function runNow(mode) {
+        const daysBack = parseInt(document.getElementById("daysBack").value, 10);
+        const url = `/kb/sync/run?mode=${mode}` + (mode === "DELTA_WINDOW" ? `&daysBack=${daysBack}` : "");
+        const run = await http(url, { method: "POST" });
+        document.getElementById("out").innerText = JSON.stringify(run, null, 2);
+    }
+
+    async function loadLatestRun() {
+        const run = await http("/kb/sync/runs/latest");
+        document.getElementById("out").innerText = JSON.stringify(run, null, 2);
+    }
+
+    loadConfig().catch(e => document.getElementById("out").innerText = "Erro: " + e.message);
+</script>
+</body>
+</html>

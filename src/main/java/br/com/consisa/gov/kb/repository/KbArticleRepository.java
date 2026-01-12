@@ -7,7 +7,6 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.OffsetDateTime;
 import java.util.List;
-import java.util.List;
 
 /**
  * Repositório JPA para acesso à tabela kb_article.
@@ -21,28 +20,47 @@ public interface KbArticleRepository extends JpaRepository<KbArticle, Long> {
     /**
      * Retorna no máximo 200 artigos que ainda não possuem sistema associado
      * (system_id IS NULL), ordenados pelos mais recentemente atualizados.
-     *
-     * Por que limitar 200?
-     * - Evita trazer milhares de registros de uma vez (performance/memória)
-     * - Ajuda na curadoria manual via tela (paginação simples)
-     *
-     * Observação:
-     * - Se no futuro precisar de paginação real, trocamos para Pageable.
      */
     List<KbArticle> findTop200BySystemIsNullOrderByUpdatedDateDesc();
+
     /**
-     * Pega IDs para delta: artigos alterados recentemente (updatedDate) OU buscados recentemente (fetchedAt).
-     * Ajuste conforme seu volume:
-     * - se quiser focar só em "mudou no Movidesk": use apenas updatedDate
-     * - se quiser manter fresco: fetchedAt também ajuda
+     * DELTA_WINDOW (produção):
+     * Pega IDs que mudaram recentemente no Movidesk (updatedDate >= since),
+     * ignorando itens "mortos" (NOT_FOUND / MISSING) pra não ficar dando 404 em loop.
+     *
+     * Observação:
+     * - Não usa fetchedAt para evitar re-sync infinito (fetchedAt muda em todo sync).
      */
     @Query("""
         select a.id
         from KbArticle a
-        where (a.updatedDate is not null and a.updatedDate >= :since)
-           or (a.fetchedAt is not null and a.fetchedAt >= :since)
-        order by coalesce(a.updatedDate, a.fetchedAt) desc
+        where
+            a.updatedDate is not null
+            and a.updatedDate >= :since
+            and (a.syncStatus is null or a.syncStatus <> 'NOT_FOUND')
+            and (a.syncState is null or a.syncState <> 'MISSING')
+        order by a.updatedDate desc
     """)
     List<Long> findIdsForDeltaSince(@Param("since") OffsetDateTime since);
 
+    /**
+     * (Opcional / legado) Se você ainda usa em algum lugar, mantenha.
+     * Caso não use, pode remover.
+     */
+    @Query("""
+        select a.id
+        from KbArticle a
+        where
+            (a.updatedDate is not null and a.updatedDate >= :since)
+            or (a.syncStatus is not null and a.syncStatus <> 'OK')
+            or (a.system is null)
+    """)
+    List<Long> findDeltaIds(@Param("since") OffsetDateTime since);
+
+    @Query("""
+        select a.id
+        from KbArticle a
+        where a.system.code = 'GERAL'
+    """)
+    List<Long> findIdsInGeral();
 }

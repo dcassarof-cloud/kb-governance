@@ -191,6 +191,17 @@ public class KbArticle {
     public void touchFetchedAt() {
         this.fetchedAt = OffsetDateTime.now(ZoneOffset.UTC);
     }
+    @Column(name = "last_seen_at")
+    private OffsetDateTime lastSeenAt;
+
+    @Column(name = "sync_state", length = 20)
+    private String syncState;
+
+    public OffsetDateTime getLastSeenAt() { return lastSeenAt; }
+    public void setLastSeenAt(OffsetDateTime lastSeenAt) { this.lastSeenAt = lastSeenAt; }
+
+    public String getSyncState() { return syncState; }
+    public void setSyncState(String syncState) { this.syncState = syncState; }
 
     /* ======================
        Getters e Setters
