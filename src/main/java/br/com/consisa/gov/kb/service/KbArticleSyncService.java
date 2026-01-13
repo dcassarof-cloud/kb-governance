@@ -49,10 +49,6 @@ public class KbArticleSyncService {
      * FULL: varre tudo e baixa tudo
      * DELTA_WINDOW: sincroniza só uma janela recente (rápido)
      */
-    public enum SyncMode {
-        FULL,
-        DELTA_WINDOW
-    }
 
     private final MovideskClient movideskClient;
     private final KbArticleRepository repository;
@@ -215,25 +211,16 @@ public class KbArticleSyncService {
         return repository.save(entity);
     }
 
-    /* =========================================================
-       SYNC ALL (FULL / DELTA_WINDOW)
-       ========================================================= */
-
     /**
-     * Atalho: por padrão, roda DELTA_WINDOW (mais rápido)
+     * FULL SYNC:
+     * Varre todos os artigos do Movidesk via search (paginado) e
+     * baixa cada artigo via getArticleById (sync(id)).
+     *
+     * ⚠️ Importante:
+     * - Quem decide FULL vs DELTA é o Orchestrator.
+     * - Aqui é só execução do FULL.
      */
-    public void syncAll() {
-        syncAll(SyncMode.DELTA_WINDOW, 2);
-    }
-
-    public void syncAll(SyncMode mode, int daysBack) {
-        if (mode == SyncMode.FULL) {
-            syncAllFull();
-            return;
-        }
-        syncAllDeltaWindow(daysBack);
-    }
-
+    @Transactional
     public void syncAllFull() {
         int page = 0;
         int pageSize = 50;
@@ -242,7 +229,7 @@ public class KbArticleSyncService {
         KbSystem geral = getSystemOrThrow("GERAL");
         Long geralId = geral.getId();
 
-        log.info("🚀 syncAll FULL iniciado. pageSize={}", pageSize);
+        log.info("🚀 syncAllFull iniciado. pageSize={}", pageSize);
 
         while (true) {
             try {
@@ -267,6 +254,7 @@ public class KbArticleSyncService {
                         KbArticle saved = sync(id);
                         if (saved == null) continue;
 
+                        // usa menu do SEARCH para classificar no FULL
                         classifyUsingMenuMap(saved, item, geral, geralId);
 
                     } catch (Exception e) {
@@ -285,49 +273,10 @@ public class KbArticleSyncService {
             }
         }
 
-        log.info("🏁 syncAll FULL finalizado.");
+        log.info("🏁 syncAllFull finalizado.");
     }
 
-    /**
-     * DELTA_WINDOW: sincroniza apenas artigos "recentes" do banco local.
-     */
-    public void syncAllDeltaWindow(int daysBack) {
-        if (daysBack <= 0) daysBack = 1;
 
-        OffsetDateTime since = OffsetDateTime.now(ZoneOffset.UTC).minusDays(daysBack);
-
-        log.info("🚀 syncAll DELTA_WINDOW iniciado. daysBack={} since={}", daysBack, since);
-
-        // ✅ Agora a query ignora NOT_FOUND/MISSING e usa só updatedDate
-        List<Long> ids = repository.findIdsForDeltaSince(since);
-
-        log.info("🧩 DELTA_WINDOW ids para sync: {}", ids.size());
-
-        KbSystem geral = getSystemOrThrow("GERAL");
-        Long geralId = geral.getId();
-
-        for (Long id : ids) {
-            if (id == null) continue;
-
-            try {
-                KbArticle saved = sync(id);
-                if (saved == null) continue;
-
-                // marca visto/estado de execução do delta
-                saved.setLastSeenAt(OffsetDateTime.now(ZoneOffset.UTC));
-                saved.setSyncState("SYNCED");
-                repository.save(saved);
-
-                classifyUsingSavedMenu(saved, geral, geralId);
-
-            } catch (Exception e) {
-                log.error("❌ erro ao sincronizar/classificar (DELTA_WINDOW) id={}", id, e);
-                openErrorIssue(id, truncate(e.getMessage(), 400));
-            }
-        }
-
-        log.info("🏁 syncAll DELTA_WINDOW finalizado.");
-    }
 
     /* =========================================================
        CLASSIFICAÇÃO (kb_menu_map)

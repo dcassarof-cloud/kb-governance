@@ -7,19 +7,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-/**
- * Controller REST responsável por expor endpoints HTTP
- * para sincronização e consulta de artigos da Knowledge Base.
- *
- * Papel na arquitetura:
- * - Recebe requisições HTTP (camada Web)
- * - Delega o processamento para o Service (regra de negócio)
- * - Retorna respostas HTTP (ResponseEntity)
- *
- * Boas práticas:
- * - Controller não contém lógica de negócio
- * - Só valida entradas simples e encaminha para o Service
- */
 @RestController
 @RequestMapping("/kb/articles")
 public class KbArticleController {
@@ -32,11 +19,7 @@ public class KbArticleController {
 
     /**
      * Sincroniza um único artigo pelo ID do Movidesk.
-     *
-     * Exemplo:
-     * POST /kb/articles/123/sync
-     *
-     * Retorna o artigo persistido/atualizado no banco local.
+     * POST /kb/articles/{id}/sync
      */
     @PostMapping("/{id}/sync")
     public ResponseEntity<KbArticle> sync(@PathVariable("id") long id) {
@@ -44,29 +27,8 @@ public class KbArticleController {
     }
 
     /**
-     * Executa sincronização em massa.
-     *
-     * Exemplo:
-     * POST /kb/articles/sync-all
-     *
-     * Retorna 200 OK sem body.
-     * (Em produção, esse tipo de ação pode virar async + retornar um jobId)
-     */
-    @PostMapping("/sync-all")
-    public ResponseEntity<Void> syncAll() {
-        service.syncAll();
-        return ResponseEntity.ok().build();
-    }
-
-    /**
-     * Atribui manualmente um sistema (KbSystem) a um artigo.
-     *
-     * Exemplo:
-     * POST /kb/articles/123/assign-system/QUINTOEIXO
-     *
-     * Uso típico:
-     * - Quando o artigo foi sincronizado mas ainda não foi classificado
-     * - Permite curadoria manual
+     * Atribui manualmente um sistema a um artigo.
+     * POST /kb/articles/{id}/assign-system/{code}
      */
     @PostMapping("/{id}/assign-system/{code}")
     public ResponseEntity<Void> assignSystem(
@@ -78,10 +40,7 @@ public class KbArticleController {
     }
 
     /**
-     * Lista artigos "não classificados", ou seja,
-     * artigos que ainda não possuem system_id (null).
-     *
-     * Exemplo:
+     * Lista artigos sem classificação (system_id null).
      * GET /kb/articles/unclassified
      */
     @GetMapping("/unclassified")

@@ -12,14 +12,15 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 @Service
 public class KbSyncOrchestratorService {
 
     private static final Logger log = LoggerFactory.getLogger(KbSyncOrchestratorService.class);
+
+    private static final int DEFAULT_FALLBACK_DAYS = 2;
+    private static final int MAX_LOOKBACK_DAYS = 7;
 
     private final KbSyncConfigRepository configRepo;
     private final KbSyncRunRepository runRepo;
@@ -49,13 +50,8 @@ public class KbSyncOrchestratorService {
 
         cfg.setEnabled(incoming.isEnabled());
         cfg.setMode(incoming.getMode() == null ? SyncMode.DELTA_WINDOW : incoming.getMode());
-
-        // guard rails
-        int interval = Math.max(1, incoming.getIntervalMinutes());
-        int daysBack = Math.max(0, incoming.getDaysBack());
-
-        cfg.setIntervalMinutes(interval);
-        cfg.setDaysBack(daysBack);
+        cfg.setIntervalMinutes(Math.max(1, incoming.getIntervalMinutes()));
+        cfg.setDaysBack(Math.max(0, incoming.getDaysBack()));
 
         return configRepo.save(cfg);
     }
@@ -65,9 +61,6 @@ public class KbSyncOrchestratorService {
         return runRepo.findTop1ByOrderByStartedAtDesc().orElse(null);
     }
 
-    /**
-     * Roda um sync “manual” (endpoint) ou “automático” (scheduler).
-     */
     @Transactional
     public KbSyncRun runNow(SyncMode mode, Integer daysBack) {
         OffsetDateTime started = OffsetDateTime.now(ZoneOffset.UTC);
@@ -82,9 +75,10 @@ public class KbSyncOrchestratorService {
         try {
             ResultCounts counts = (mode == SyncMode.FULL)
                     ? runFull(countsInit())
-                    : runDeltaWindow(daysBack == null ? 2 : daysBack, countsInit());
+                    : runDelta(countsInit(), daysBack);
 
             OffsetDateTime finished = OffsetDateTime.now(ZoneOffset.UTC);
+
             run.setFinishedAt(finished);
             run.setDurationMs(Duration.between(started, finished).toMillis());
             run.setStatus(SyncRunStatus.SUCCESS);
@@ -95,7 +89,6 @@ public class KbSyncOrchestratorService {
             run.setNotFoundCount(counts.notFound);
             run.setErrorCount(counts.errors);
 
-            // marca timestamps no config
             KbSyncConfig cfg = configRepo.findById(1L).orElseGet(KbSyncConfig::new);
             cfg.setLastStartedAt(started);
             cfg.setLastFinishedAt(finished);
@@ -114,40 +107,28 @@ public class KbSyncOrchestratorService {
         }
     }
 
-    // ==============================
-    // Estratégias de sync
-    // ==============================
+    // ======================
+    // Estratégias
+    // ======================
 
     private ResultCounts runFull(ResultCounts c) {
-        // FULL = usa teu syncAll atual (paginado no Movidesk)
-        // (se você quiser, depois a gente move a lógica do loop pra cá e deixa o ArticleSync só com sync(id)+classificação)
-        articleSyncService.syncAll();
-        c.synced += 1; // marcador simples (depois dá pra contar de verdade)
+        articleSyncService.syncAllFull(); // ✅ FULL real
+        c.synced = 1;
         return c;
     }
 
-    private ResultCounts runDeltaWindow(int daysBack, ResultCounts c) {
-        OffsetDateTime since = OffsetDateTime.now(ZoneOffset.UTC).minusDays(daysBack);
 
-        // 1) pega candidatos por janela (local)
-        List<Long> deltaIds = articleRepo.findDeltaIds(since);
+    private ResultCounts runDelta(ResultCounts c, Integer daysBack) {
+        OffsetDateTime since = computeSince(daysBack);
+        List<Long> ids = articleRepo.findDeltaIdsAfter(since);
 
-        // 2) opcional: reforça “problemas” (ex: GERAL) pra reclassificar se menu_map mudou
-        List<Long> geralIds = articleRepo.findIdsInGeral();
-
-        Set<Long> ids = new HashSet<>(deltaIds);
-        ids.addAll(geralIds);
-
-        log.info("🟦 DELTA_WINDOW daysBack={} candidates={}", daysBack, ids.size());
+        log.info("🟦 DELTA_SINCE since={} candidates={}", since, ids.size());
 
         for (Long id : ids) {
             try {
-                var saved = articleSyncService.sync(id); // puxa artigo completo
-                if (saved == null) {
-                    c.notFound++;
-                } else {
-                    c.updated++; // aqui “updated” = reprocessado
-                }
+                var saved = articleSyncService.sync(id);
+                if (saved == null) c.notFound++;
+                else c.updated++;
             } catch (Exception ex) {
                 c.errors++;
             }
@@ -156,11 +137,33 @@ public class KbSyncOrchestratorService {
         return c;
     }
 
-    // ==============================
-    // helpers
-    // ==============================
+    // ======================
+    // Helpers
+    // ======================
 
-    private static ResultCounts countsInit() { return new ResultCounts(); }
+    private OffsetDateTime computeSince(Integer daysBack) {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+
+        if (daysBack != null) {
+            return clamp(now.minusDays(daysBack), now);
+        }
+
+        OffsetDateTime since = runRepo
+                .findTop1ByStatusOrderByFinishedAtDesc(SyncRunStatus.SUCCESS)
+                .map(KbSyncRun::getFinishedAt)
+                .orElse(now.minusDays(DEFAULT_FALLBACK_DAYS));
+
+        return clamp(since, now);
+    }
+
+    private OffsetDateTime clamp(OffsetDateTime since, OffsetDateTime now) {
+        OffsetDateTime min = now.minusDays(MAX_LOOKBACK_DAYS);
+        return since.isBefore(min) ? min : since;
+    }
+
+    private static ResultCounts countsInit() {
+        return new ResultCounts();
+    }
 
     private static String trunc(String s, int max) {
         if (s == null) return null;
