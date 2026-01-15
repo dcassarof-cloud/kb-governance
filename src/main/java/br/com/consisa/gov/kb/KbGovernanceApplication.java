@@ -14,7 +14,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * Este é o ponto de entrada da aplicação.
  */
 @SpringBootApplication
-public class KbGovernanceApplication {
+public class   KbGovernanceApplication {
 
     /**
      * Método main responsável por iniciar a aplicação.

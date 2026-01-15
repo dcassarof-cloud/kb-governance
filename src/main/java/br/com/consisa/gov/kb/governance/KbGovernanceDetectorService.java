@@ -8,14 +8,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * Orquestrador de detectores de governança.
- *
- * Ele serve para:
- * - rodar detectores em um artigo (analyzeArticle)
- * - rodar em lote (recentes)
- * - rodar duplicados (todos ou por hash)
- */
 @Service
 public class KbGovernanceDetectorService {
 
@@ -23,61 +15,53 @@ public class KbGovernanceDetectorService {
     private final IncompleteContentDetector incomplete;
     private final DuplicateContentDetector duplicate;
 
-    public KbGovernanceDetectorService(
-            KbArticleRepository articleRepo,
-            IncompleteContentDetector incomplete,
-            DuplicateContentDetector duplicate
-    ) {
+    public KbGovernanceDetectorService(KbArticleRepository articleRepo,
+                                       IncompleteContentDetector incomplete,
+                                       DuplicateContentDetector duplicate) {
         this.articleRepo = articleRepo;
         this.incomplete = incomplete;
         this.duplicate = duplicate;
     }
 
     /**
-     * Analisa um artigo chamando todos os detectores "por artigo".
-     * (Duplicados normalmente é por hash / lote, mas pode rodar aqui também se quiser no futuro.)
+     * Analisa 1 artigo (útil para varreduras paginadas).
+     * Aqui ficam "detectores por artigo" (conteúdo incompleto, inconsistências, etc).
      */
     @Transactional
     public void analyzeArticle(KbArticle article) {
         if (article == null) return;
 
-        // 1) incompleto (placeholder, vazio, etc.)
+        // Detector: conteúdo incompleto (ex: contentHtml/text vazio)
         incomplete.analyze(article);
 
-        // (2) outros detectores por artigo entram aqui depois
+        // futuros detectores:
         // inconsistent.analyze(article);
         // outdated.analyze(article);
     }
 
     /**
-     * Analisa os artigos mais recentes (por updated/created).
-     *
-     * @return quantos artigos foram processados
+     * Analisa os mais recentes (retorna quantos analisou).
+     * Obs: controller pode optar por chamar isso ou consultar repo direto.
      */
     @Transactional
     public int analyzeRecent(int limit) {
-        if (limit <= 0) limit = 50;
-
-        var page = articleRepo.findRecent(PageRequest.of(0, limit));
+        int size = Math.max(1, limit);
+        var page = articleRepo.findRecent(PageRequest.of(0, size));
         page.forEach(this::analyzeArticle);
-
         return page.getNumberOfElements();
     }
 
-    // ============================
-    // DUPLICADOS
-    // ============================
-
-    @Transactional
-    public int analyzeDuplicates() {
-        return duplicate.analyzeAllDuplicates();
-    }
-
+    /**
+     * DUPLICADOS: roda para todos os hashes duplicados (retorna qtd issues).
+     */
     @Transactional
     public int analyzeAllDuplicates() {
         return duplicate.analyzeAllDuplicates();
     }
 
+    /**
+     * DUPLICADOS: roda um hash específico (retorna qtd issues).
+     */
     @Transactional
     public int analyzeHash(String hash) {
         return duplicate.analyzeHash(hash);

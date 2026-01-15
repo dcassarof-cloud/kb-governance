@@ -37,33 +37,48 @@ public class KbGovernanceController {
                 PageRequest.of(0, safe, Sort.by(Sort.Direction.DESC, "updatedDate"))
         );
 
+        // Analisa cada artigo individualmente (ex: conteúdo incompleto etc.)
         page.forEach(detector::analyzeArticle);
 
         return ResponseEntity.ok(Map.of(
                 "analyzed", page.getNumberOfElements()
         ));
     }
+
+    /**
+     * Executa o detector de duplicados para TODOS os hashes duplicados.
+     * Ex: POST /kb/governance/run
+     */
     @PostMapping("/run")
     public ResponseEntity<?> runAll() {
         int total = detector.analyzeAllDuplicates();
-        return ResponseEntity.ok(java.util.Map.of("issuesOpenedOrUpdated", total));
+        return ResponseEntity.ok(Map.of("issuesOpenedOrUpdated", total));
     }
 
+    /**
+     * Executa o detector de duplicados para UM hash específico.
+     * Ex: POST /kb/governance/hash/abc123
+     */
     @PostMapping("/hash/{hash}")
     public ResponseEntity<?> runOne(@PathVariable String hash) {
         int total = detector.analyzeHash(hash);
-        return ResponseEntity.ok(java.util.Map.of("issuesOpenedOrUpdated", total, "hash", hash));
+        return ResponseEntity.ok(Map.of(
+                "issuesOpenedOrUpdated", total,
+                "hash", hash
+        ));
     }
 
     /**
      * Detecta duplicados por content_hash.
      * Ex: POST /kb/governance/analyze/duplicates
+     *
+     * OBS: esse endpoint agora chama o método que existe: analyzeAllDuplicates().
      */
     @PostMapping("/analyze/duplicates")
     public ResponseEntity<?> analyzeDuplicates() {
-        int groups = detector.analyzeDuplicates();
+        int totalIssues = detector.analyzeAllDuplicates();
         return ResponseEntity.ok(Map.of(
-                "duplicateGroups", groups
+                "issuesOpenedOrUpdated", totalIssues
         ));
     }
 }
