@@ -120,7 +120,7 @@ public class KbSyncOrchestratorService {
 
     private ResultCounts runDelta(ResultCounts c, Integer daysBack) {
         OffsetDateTime since = computeSince(daysBack);
-        List<Long> ids = articleRepo.findDeltaIdsAfter(since);
+        List<Long> ids = articleRepo.findIdsForDeltaSince(since);
 
         log.info("🟦 DELTA_SINCE since={} candidates={}", since, ids.size());
 

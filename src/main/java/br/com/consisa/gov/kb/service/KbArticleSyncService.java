@@ -14,6 +14,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.HttpClientErrorException;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -24,10 +26,6 @@ import java.util.List;
 
 /**
  * Serviço responsável por sincronizar artigos da KB do Movidesk para o banco local.
- *
- * PERFORMANCE / MODOS:
- * - FULL: varre tudo via searchArticles e baixa cada artigo via getArticleById
- * - DELTA_WINDOW: sincroniza apenas uma janela de tempo (do DB)
  */
 @Service
 public class KbArticleSyncService {
@@ -44,11 +42,6 @@ public class KbArticleSyncService {
 
     // Fonte oficial do menu map
     private static final String SOURCE_SYSTEM = "movidesk";
-
-    /**
-     * FULL: varre tudo e baixa tudo
-     * DELTA_WINDOW: sincroniza só uma janela recente (rápido)
-     */
 
     private final MovideskClient movideskClient;
     private final KbArticleRepository repository;
@@ -108,12 +101,11 @@ public class KbArticleSyncService {
     protected void openNotFoundIssue(long articleId, String msg) {
         issueService.open(articleId, KbSyncIssueType.NOT_FOUND, msg);
 
-        // Se existir no banco, marca status técnico (sem criar stub)
         repository.findById(articleId).ifPresent(a -> {
             a.setSyncStatus(SYNC_NOT_FOUND);
             a.setSyncErrorMessage(truncate(msg, 400));
 
-            // ✅ NOVO: marca como "morto" pra sair do ciclo de DELTA_WINDOW
+            // marca como "morto" pra sair do ciclo do delta
             a.setSyncState("MISSING");
             a.setLastSeenAt(OffsetDateTime.now(ZoneOffset.UTC));
 
@@ -184,10 +176,21 @@ public class KbArticleSyncService {
         String slug = (dto.getSlug() == null) ? "" : dto.getSlug();
         entity.setSourceUrl("https://consisanet.movidesk.com/kb/pt-br/article/" + dto.getId() + "/" + slug);
 
-        // menu (endpoint completo)
+        // menu
         if (dto.getMenu() != null) {
             entity.setSourceMenuId(dto.getMenu().getId());
             entity.setSourceMenuName(dto.getMenu().getName());
+        }
+
+        // ✅ content_hash: base para detector de duplicados
+        String baseForHash = (entity.getContentText() != null && !entity.getContentText().isBlank())
+                ? entity.getContentText()
+                : entity.getContentHtml();
+
+        if (baseForHash != null && !baseForHash.isBlank()) {
+            entity.setContentHash(sha256(normalizeForHash(baseForHash)));
+        } else {
+            entity.setContentHash(null);
         }
 
         // governança mínima
@@ -212,13 +215,8 @@ public class KbArticleSyncService {
     }
 
     /**
-     * FULL SYNC:
-     * Varre todos os artigos do Movidesk via search (paginado) e
-     * baixa cada artigo via getArticleById (sync(id)).
-     *
-     * ⚠️ Importante:
-     * - Quem decide FULL vs DELTA é o Orchestrator.
-     * - Aqui é só execução do FULL.
+     * FULL SYNC: varre todos os artigos do Movidesk via search (paginado)
+     * e baixa cada artigo via getArticleById (sync(id)).
      */
     @Transactional
     public void syncAllFull() {
@@ -238,11 +236,7 @@ public class KbArticleSyncService {
 
                 if (totalSize == null) totalSize = resp.getTotalSize();
 
-                log.info("📄 page={} totalSize={} items={}",
-                        page,
-                        totalSize,
-                        (items == null ? 0 : items.size())
-                );
+                log.info("📄 page={} totalSize={} items={}", page, totalSize, (items == null ? 0 : items.size()));
 
                 if (items == null || items.isEmpty()) break;
 
@@ -267,16 +261,13 @@ public class KbArticleSyncService {
                 if (totalSize != null && page * pageSize >= totalSize) break;
 
             } catch (Exception ex) {
-                log.error("❌ Falha no searchArticles page={}. Encerrando FULL. motivo={}",
-                        page, ex.toString(), ex);
+                log.error("❌ Falha no searchArticles page={}. Encerrando FULL. motivo={}", page, ex.toString(), ex);
                 break;
             }
         }
 
         log.info("🏁 syncAllFull finalizado.");
     }
-
-
 
     /* =========================================================
        CLASSIFICAÇÃO (kb_menu_map)
@@ -311,35 +302,7 @@ public class KbArticleSyncService {
             log.warn("🧭 Caiu em GERAL. id={} menuId={} menuRaw='{}'", id, menuId, menuName);
         }
 
-        log.info("✅ classificado id={} menuId={} menu='{}' systemId={}",
-                id, menuId, menuName, systemId);
-    }
-
-    private void classifyUsingSavedMenu(KbArticle saved, KbSystem geral, Long geralId) {
-        Long id = saved.getId();
-
-        Long menuId = saved.getSourceMenuId();
-        String menuName = saved.getSourceMenuName();
-
-        KbSystem system = resolveSystemFromMenu(menuId, menuName, id, geral);
-
-        saved.setSystem(system);
-
-        if (saved.getGovernanceStatus() == null || saved.getGovernanceStatus().isBlank()) {
-            saved.setGovernanceStatus(GOV_PENDING);
-        }
-
-        repository.save(saved);
-
-        Long systemId = (system == null ? null : system.getId());
-        boolean caiuEmGeral = (systemId == null) || (geralId != null && geralId.equals(systemId));
-
-        if (caiuEmGeral) {
-            log.warn("🧭 (DELTA) Caiu em GERAL. id={} menuId={} menuRaw='{}'", id, menuId, menuName);
-        }
-
-        log.info("✅ (DELTA) classificado id={} menuId={} menu='{}' systemId={}",
-                id, menuId, menuName, systemId);
+        log.info("✅ classificado id={} menuId={} menu='{}' systemId={}", id, menuId, menuName, systemId);
     }
 
     private KbSystem resolveSystemFromMenu(Long menuId, String menuName, Long articleId, KbSystem geral) {
@@ -385,10 +348,6 @@ public class KbArticleSyncService {
                 .orElseThrow(() -> new IllegalStateException("Sistema não encontrado no banco: " + code));
     }
 
-    /* =========================================================
-       AUXILIARES
-       ========================================================= */
-
     @Transactional
     public void assignSystem(long articleId, String systemCode) {
         KbArticle article = repository.findById(articleId)
@@ -404,5 +363,28 @@ public class KbArticleSyncService {
     @Transactional(readOnly = true)
     public List<KbArticle> listUnclassified() {
         return repository.findTop200BySystemIsNullOrderByUpdatedDateDesc();
+    }
+
+    // ============================
+    // ✅ HASH HELPERS (NO FINAL!)
+    // ============================
+
+    private static String normalizeForHash(String s) {
+        if (s == null) return "";
+        return s.replaceAll("\\s+", " ")
+                .trim()
+                .toLowerCase();
+    }
+
+    private static String sha256(String s) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] bytes = md.digest(s.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : bytes) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (Exception e) {
+            throw new RuntimeException("Erro ao gerar SHA-256", e);
+        }
     }
 }
