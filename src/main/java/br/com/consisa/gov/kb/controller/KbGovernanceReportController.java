@@ -11,12 +11,7 @@ import java.util.Map;
 /**
  * Controller para relatório de governança dos manuais
  *
- * Endpoints:
- * - Relatório completo
- * - Filtrado por sistema
- * - Apenas com problemas
- * - Apenas IA-Ready
- * - Estatísticas agregadas
+ * ✅ CORRIGIDO: Endpoints separados para evitar conflito de params
  */
 @RestController
 @RequestMapping("/kb/governance/report")
@@ -32,27 +27,6 @@ public class KbGovernanceReportController {
      * 📊 Relatório completo de todos os artigos
      *
      * GET /kb/governance/report
-     *
-     * Retorna análise de TODOS os artigos com:
-     * - Flags de problemas
-     * - Lista de ações necessárias
-     * - Score de qualidade
-     * - Flag IA-Ready
-     *
-     * Exemplo de resposta:
-     * [
-     *   {
-     *     "articleId": 123,
-     *     "systemCode": "NOTAON",
-     *     "title": "Cancelar NFS-e",
-     *     "actions": [
-     *       "MANUAL_SEM_ESTRUTURA_MINIMA",
-     *       "MANUAL_CURTO_DEMAIS"
-     *     ],
-     *     "qualityScore": 40,
-     *     "iaReady": false
-     *   }
-     * ]
      */
     @GetMapping
     public ResponseEntity<List<KbArticleGovernanceReportDto>> getFullReport() {
@@ -62,13 +36,13 @@ public class KbGovernanceReportController {
     /**
      * 🔍 Relatório filtrado por sistema
      *
-     * GET /kb/governance/report?systemCode=NOTAON
+     * GET /kb/governance/report/by-system/{systemCode}
      *
-     * Retorna apenas artigos do sistema especificado
+     * Exemplo: GET /kb/governance/report/by-system/NOTAON
      */
-    @GetMapping(params = "systemCode")
+    @GetMapping("/by-system/{systemCode}")
     public ResponseEntity<List<KbArticleGovernanceReportDto>> getReportBySystem(
-            @RequestParam String systemCode
+            @PathVariable String systemCode
     ) {
         return ResponseEntity.ok(service.generateReportBySystem(systemCode));
     }
@@ -77,9 +51,6 @@ public class KbGovernanceReportController {
      * ⚠️ Relatório apenas de artigos COM PROBLEMAS
      *
      * GET /kb/governance/report/issues
-     *
-     * Retorna apenas artigos que precisam de ação
-     * (vazio, curto, duplicado ou sem estrutura)
      */
     @GetMapping("/issues")
     public ResponseEntity<List<KbArticleGovernanceReportDto>> getIssuesOnly() {
@@ -90,11 +61,6 @@ public class KbGovernanceReportController {
      * ✅ Relatório de artigos IA-READY
      *
      * GET /kb/governance/report/ia-ready
-     *
-     * Retorna apenas artigos que atendem critérios mínimos para IA:
-     * - Não vazio
-     * - Não duplicado no mesmo sistema
-     * - Tem estrutura mínima
      */
     @GetMapping("/ia-ready")
     public ResponseEntity<List<KbArticleGovernanceReportDto>> getIaReady() {
@@ -105,18 +71,6 @@ public class KbGovernanceReportController {
      * 📈 Estatísticas agregadas
      *
      * GET /kb/governance/report/stats
-     *
-     * Retorna resumo geral:
-     * {
-     *   "total": 1203,
-     *   "emptyCount": 45,
-     *   "shortCount": 123,
-     *   "duplicateCount": 28,
-     *   "hashReusedCount": 12,
-     *   "noStructureCount": 347,
-     *   "iaReadyCount": 650,
-     *   "iaReadyPercentage": 54.03
-     * }
      */
     @GetMapping("/stats")
     public ResponseEntity<Map<String, Object>> getStatistics() {

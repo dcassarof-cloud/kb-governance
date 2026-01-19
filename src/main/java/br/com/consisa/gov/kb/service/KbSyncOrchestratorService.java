@@ -14,6 +14,15 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 
+/**
+ * 🎯 VERSÃO CORRIGIDA - Compatível com refatoração do KbArticleSyncService
+ *
+ * MUDANÇAS:
+ * ---------
+ * ✅ Injeção de KbFullSyncService (novo)
+ * ✅ runFull() agora chama fullSyncService.syncAll()
+ * ✅ runDelta() continua chamando articleSyncService.sync(id)
+ */
 @Service
 public class KbSyncOrchestratorService {
 
@@ -27,16 +36,21 @@ public class KbSyncOrchestratorService {
     private final KbArticleRepository articleRepo;
     private final KbArticleSyncService articleSyncService;
 
+    // ✅ NOVO: injeção do KbFullSyncService
+    private final KbFullSyncService fullSyncService;
+
     public KbSyncOrchestratorService(
             KbSyncConfigRepository configRepo,
             KbSyncRunRepository runRepo,
             KbArticleRepository articleRepo,
-            KbArticleSyncService articleSyncService
+            KbArticleSyncService articleSyncService,
+            KbFullSyncService fullSyncService  // ✅ NOVO PARÂMETRO
     ) {
         this.configRepo = configRepo;
         this.runRepo = runRepo;
         this.articleRepo = articleRepo;
         this.articleSyncService = articleSyncService;
+        this.fullSyncService = fullSyncService;  // ✅ NOVO
     }
 
     @Transactional(readOnly = true)
@@ -111,13 +125,22 @@ public class KbSyncOrchestratorService {
     // Estratégias
     // ======================
 
+    /**
+     * ✅ CORRIGIDO: agora usa KbFullSyncService
+     */
     private ResultCounts runFull(ResultCounts c) {
-        articleSyncService.syncAllFull(); // ✅ FULL real
-        c.synced = 1;
+        log.info("🔄 Executando FULL SYNC via KbFullSyncService...");
+
+        // ✅ MUDANÇA: chama o service especializado
+        fullSyncService.syncAll();
+
+        c.synced = 1; // placeholder (fullSync não retorna contadores ainda)
         return c;
     }
 
-
+    /**
+     * ✅ MANTIDO: continua igual
+     */
     private ResultCounts runDelta(ResultCounts c, Integer daysBack) {
         OffsetDateTime since = computeSince(daysBack);
         List<Long> ids = articleRepo.findIdsForDeltaSince(since);

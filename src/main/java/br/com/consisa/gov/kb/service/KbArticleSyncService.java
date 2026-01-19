@@ -1,390 +1,291 @@
 package br.com.consisa.gov.kb.service;
 
 import br.com.consisa.gov.kb.client.movidesk.MovideskArticleDto;
-import br.com.consisa.gov.kb.client.movidesk.MovideskArticleSearchItemDto;
 import br.com.consisa.gov.kb.client.movidesk.MovideskClient;
 import br.com.consisa.gov.kb.domain.KbArticle;
 import br.com.consisa.gov.kb.domain.KbSyncIssueType;
-import br.com.consisa.gov.kb.domain.KbSystem;
 import br.com.consisa.gov.kb.repository.KbArticleRepository;
-import br.com.consisa.gov.kb.repository.KbSystemRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.HttpClientErrorException;
-
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.time.LocalDateTime;
+import br.com.consisa.gov.kb.domain.KbSystem;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeFormatterBuilder;
-import java.time.temporal.ChronoField;
 import java.util.List;
 
 /**
- * Serviço responsável por sincronizar artigos da KB do Movidesk para o banco local.
+ * 🔄 Service de sincronização individual de artigos
+ *
+ * RESPONSABILIDADES (após refatoração):
+ * -------------------------------------
+ * ✅ Buscar artigo no Movidesk (GET /article/{id})
+ * ✅ Tratar erros HTTP (404, 5xx, timeout)
+ * ✅ Orquestrar mapeamento, classificação e persistência
+ * ✅ Abrir issues quando necessário
+ * ✅ Atualizar status de sync
+ *
+ * NÃO FAZ MAIS (delegado):
+ * -------------------------
+ * ❌ Parsing de datas → MovideskDateParser
+ * ❌ Geração de hash → KbArticleHashService
+ * ❌ Classificação → KbArticleClassificationService
+ * ❌ Mapeamento DTO → KbArticleMetadataMapper
+ * ❌ Sync full → KbFullSyncService
+ *
+ * QUANDO USAR:
+ * ------------
+ * - Sync individual de UM artigo
+ * - Chamado pelo DELTA sync
+ * - Chamado pelo FULL sync (via loop)
+ * - Endpoint manual: POST /kb/articles/{id}/sync
+ *
+ * FLUXO:
+ * ------
+ * 1. Busca artigo via HTTP (MovideskClient)
+ * 2. Trata 404 → abre issue NOT_FOUND
+ * 3. Trata erros → abre issue ERROR
+ * 4. Mapeia DTO → Entity (MetadataMapper)
+ * 5. Classifica (ClassificationService)
+ * 6. Detecta conteúdo vazio → abre issue EMPTY_CONTENT
+ * 7. Marca sync_status = OK
+ * 8. Salva no banco
+ * 9. Retorna entidade salva
  */
 @Service
 public class KbArticleSyncService {
 
     private static final Logger log = LoggerFactory.getLogger(KbArticleSyncService.class);
 
-    // Status locais (em kb_article)
+    // Status técnicos do sync
     private static final String SYNC_OK = "OK";
     private static final String SYNC_NOT_FOUND = "NOT_FOUND";
     private static final String SYNC_ERROR = "ERROR";
 
-    // Governança mínima (para inserts)
-    private static final String GOV_PENDING = "PENDING";
-
-    // Fonte oficial do menu map
-    private static final String SOURCE_SYSTEM = "movidesk";
-
+    // Dependencies (injeção)
     private final MovideskClient movideskClient;
     private final KbArticleRepository repository;
-    private final KbSystemRepository systemRepository;
-    private final KbMenuMapService menuMapService;
+    private final KbArticleMetadataMapper metadataMapper;
+    private final KbArticleClassificationService classificationService;
     private final KbSyncIssueService issueService;
+    private final KbArticleHashService hashService;
+    private final KbSystemService systemService;
 
     public KbArticleSyncService(
             MovideskClient movideskClient,
             KbArticleRepository repository,
-            KbSystemRepository systemRepository,
-            KbMenuMapService menuMapService,
-            KbSyncIssueService issueService
+            KbArticleMetadataMapper metadataMapper,
+            KbArticleClassificationService classificationService,
+            KbSyncIssueService issueService,
+            KbArticleHashService hashService,
+            KbSystemService systemService
     ) {
         this.movideskClient = movideskClient;
         this.repository = repository;
-        this.systemRepository = systemRepository;
-        this.menuMapService = menuMapService;
+        this.metadataMapper = metadataMapper;
+        this.classificationService = classificationService;
         this.issueService = issueService;
-    }
-
-    /* =========================================================
-       DATE PARSER (Movidesk é inconsistente com offset)
-       ========================================================= */
-
-    private static final DateTimeFormatter MOVI_DATE = new DateTimeFormatterBuilder()
-            .appendPattern("yyyy-MM-dd'T'HH:mm:ss")
-            .optionalStart()
-            .appendFraction(ChronoField.NANO_OF_SECOND, 1, 9, true)
-            .optionalEnd()
-            .optionalStart()
-            .appendOffsetId()
-            .optionalEnd()
-            .toFormatter();
-
-    private static OffsetDateTime parseMovi(String s) {
-        if (s == null || s.isBlank()) return null;
-
-        boolean hasOffset =
-                s.endsWith("Z") ||
-                        s.contains("+") ||
-                        s.matches(".*-\\d\\d:\\d\\d$");
-
-        if (!hasOffset) {
-            LocalDateTime ldt = LocalDateTime.parse(s, MOVI_DATE);
-            return ldt.atOffset(ZoneOffset.UTC);
-        }
-
-        return OffsetDateTime.parse(s, MOVI_DATE);
-    }
-
-    /* =========================================================
-       ISSUE HELPERS (sem criar stub)
-       ========================================================= */
-
-    @Transactional
-    protected void openNotFoundIssue(long articleId, String msg) {
-        issueService.open(articleId, KbSyncIssueType.NOT_FOUND, msg);
-
-        repository.findById(articleId).ifPresent(a -> {
-            a.setSyncStatus(SYNC_NOT_FOUND);
-            a.setSyncErrorMessage(truncate(msg, 400));
-
-            // marca como "morto" pra sair do ciclo do delta
-            a.setSyncState("MISSING");
-            a.setLastSeenAt(OffsetDateTime.now(ZoneOffset.UTC));
-
-            repository.save(a);
-        });
-    }
-
-    @Transactional
-    protected void openErrorIssue(long articleId, String msg) {
-        issueService.open(articleId, KbSyncIssueType.ERROR, msg);
-
-        repository.findById(articleId).ifPresent(a -> {
-            a.setSyncStatus(SYNC_ERROR);
-            a.setSyncErrorMessage(truncate(msg, 400));
-            repository.save(a);
-        });
-    }
-
-    /* =========================================================
-       SYNC INDIVIDUAL (GET /article/{id})
-       ========================================================= */
-
-    @Transactional
-    public KbArticle sync(long articleId) {
-        MovideskArticleDto dto;
-
-        try {
-            dto = movideskClient.getArticleById(articleId);
-
-        } catch (HttpClientErrorException.NotFound ex) {
-            log.warn("⚠️ Movidesk 404 (Article was not found). id={}", articleId);
-            openNotFoundIssue(articleId, "Movidesk 404: Article was not found");
-            return null;
-
-        } catch (Exception ex) {
-            log.error("❌ Erro ao buscar artigo no Movidesk. id={} motivo={}", articleId, ex.toString());
-            openErrorIssue(articleId, truncate(ex.getMessage(), 400));
-            return null;
-        }
-
-        if (dto.getId() == null) {
-            openErrorIssue(articleId, "Movidesk retornou dto.id null");
-            throw new IllegalStateException("Movidesk retornou artigo sem id (null) para articleId=" + articleId);
-        }
-
-        // update se existe, insert se não existe
-        KbArticle entity = repository.findById(dto.getId()).orElseGet(KbArticle::new);
-
-        // metadados
-        entity.setId(dto.getId());
-        entity.setTitle(dto.getTitle());
-        entity.setSlug(dto.getSlug());
-        entity.setArticleStatus(dto.getArticleStatus());
-        entity.setSummary(dto.getSummary());
-        entity.setContentHtml(dto.getContentHtml());
-        entity.setContentText(dto.getContentText());
-        entity.setRevisionId(dto.getRevisionId());
-        entity.setReadingTime(dto.getReadingTime());
-
-        // datas
-        entity.setCreatedDate(parseMovi(dto.getCreatedDate()));
-        entity.setUpdatedDate(parseMovi(dto.getUpdatedDate()));
-
-        // origem/auditoria
-        entity.setSourceSystem(SOURCE_SYSTEM);
-        entity.setFetchedAt(OffsetDateTime.now(ZoneOffset.UTC));
-
-        String slug = (dto.getSlug() == null) ? "" : dto.getSlug();
-        entity.setSourceUrl("https://consisanet.movidesk.com/kb/pt-br/article/" + dto.getId() + "/" + slug);
-
-        // menu
-        if (dto.getMenu() != null) {
-            entity.setSourceMenuId(dto.getMenu().getId());
-            entity.setSourceMenuName(dto.getMenu().getName());
-        }
-
-        // ✅ content_hash: base para detector de duplicados
-        String baseForHash = (entity.getContentText() != null && !entity.getContentText().isBlank())
-                ? entity.getContentText()
-                : entity.getContentHtml();
-
-        if (baseForHash != null && !baseForHash.isBlank()) {
-            entity.setContentHash(sha256(normalizeForHash(baseForHash)));
-        } else {
-            entity.setContentHash(null);
-        }
-
-        // governança mínima
-        if (entity.getGovernanceStatus() == null || entity.getGovernanceStatus().isBlank()) {
-            entity.setGovernanceStatus(GOV_PENDING);
-        }
-
-        // status técnico OK
-        entity.setSyncStatus(SYNC_OK);
-        entity.setSyncErrorMessage(null);
-
-        // métrica: conteúdo vazio
-        boolean emptyText = (entity.getContentText() == null || entity.getContentText().trim().isEmpty());
-        boolean emptyHtml = (entity.getContentHtml() == null || entity.getContentHtml().trim().isEmpty());
-        if (emptyText && emptyHtml) {
-            issueService.open(entity.getId(), KbSyncIssueType.EMPTY_CONTENT,
-                    "Artigo com conteúdo vazio (HTML e TEXT)");
-            log.warn("📭 Issue EMPTY_CONTENT id={} title='{}'", entity.getId(), entity.getTitle());
-        }
-
-        return repository.save(entity);
+        this.hashService = hashService;
+        this.systemService = systemService;
     }
 
     /**
-     * FULL SYNC: varre todos os artigos do Movidesk via search (paginado)
-     * e baixa cada artigo via getArticleById (sync(id)).
+     * Sincroniza UM artigo do Movidesk.
+     *
+     * ⚠️ Transacional: rollback se erro ao salvar.
+     *
+     * @param articleId ID do artigo no Movidesk
+     * @return entidade salva ou null se não encontrado
+     *
+     * @throws RuntimeException se erro crítico (não HTTP)
      */
     @Transactional
-    public void syncAllFull() {
-        int page = 0;
-        int pageSize = 50;
-        Integer totalSize = null;
+    public KbArticle sync(long articleId) {
+        // ===========================
+        // 1) Busca artigo via HTTP
+        // ===========================
 
-        KbSystem geral = getSystemOrThrow("GERAL");
-        Long geralId = geral.getId();
+        MovideskArticleDto dto;
 
-        log.info("🚀 syncAllFull iniciado. pageSize={}", pageSize);
+        try {
+            log.debug("🔄 Sync artigo id={}", articleId);
+            dto = movideskClient.getArticleById(articleId);
 
-        while (true) {
-            try {
-                var resp = movideskClient.searchArticles(page, pageSize);
-                var items = resp.getItems();
+        } catch (HttpClientErrorException.NotFound ex) {
+            // 404: artigo foi deletado ou nunca existiu
+            log.warn("⚠️ Movidesk 404 (Article was not found). id={}", articleId);
+            handleNotFound(articleId);
+            return null;
 
-                if (totalSize == null) totalSize = resp.getTotalSize();
-
-                log.info("📄 page={} totalSize={} items={}", page, totalSize, (items == null ? 0 : items.size()));
-
-                if (items == null || items.isEmpty()) break;
-
-                for (MovideskArticleSearchItemDto item : items) {
-                    Long id = (item == null) ? null : item.getId();
-                    if (id == null) continue;
-
-                    try {
-                        KbArticle saved = sync(id);
-                        if (saved == null) continue;
-
-                        // usa menu do SEARCH para classificar no FULL
-                        classifyUsingMenuMap(saved, item, geral, geralId);
-
-                    } catch (Exception e) {
-                        log.error("❌ erro ao sincronizar/classificar id={}", id, e);
-                        openErrorIssue(id, truncate(e.getMessage(), 400));
-                    }
-                }
-
-                page++;
-                if (totalSize != null && page * pageSize >= totalSize) break;
-
-            } catch (Exception ex) {
-                log.error("❌ Falha no searchArticles page={}. Encerrando FULL. motivo={}", page, ex.toString(), ex);
-                break;
-            }
+        } catch (Exception ex) {
+            // 5xx, timeout, DNS, etc
+            log.error("❌ Erro ao buscar artigo. id={} motivo={}", articleId, ex.toString());
+            handleError(articleId, ex);
+            return null;
         }
 
-        log.info("🏁 syncAllFull finalizado.");
-    }
+        // ===========================
+        // 2) Validação básica
+        // ===========================
 
-    /* =========================================================
-       CLASSIFICAÇÃO (kb_menu_map)
-       ========================================================= */
-
-    private void classifyUsingMenuMap(KbArticle saved,
-                                      MovideskArticleSearchItemDto item,
-                                      KbSystem geral,
-                                      Long geralId) {
-
-        Long id = saved.getId();
-
-        Long menuId = safeMenuId(item);
-        String menuName = safeMenuName(item);
-
-        KbSystem system = resolveSystemFromMenu(menuId, menuName, id, geral);
-
-        saved.setSystem(system);
-        if (menuId != null) saved.setSourceMenuId(menuId);
-        if (menuName != null && !menuName.isBlank()) saved.setSourceMenuName(menuName);
-
-        if (saved.getGovernanceStatus() == null || saved.getGovernanceStatus().isBlank()) {
-            saved.setGovernanceStatus(GOV_PENDING);
+        if (dto.getId() == null) {
+            String msg = "Movidesk retornou dto.id null";
+            log.error("❌ {}", msg);
+            handleError(articleId, new IllegalStateException(msg));
+            throw new IllegalStateException(msg + " para articleId=" + articleId);
         }
 
-        repository.save(saved);
+        // ===========================
+        // 3) Mapeia DTO → Entity
+        // ===========================
 
-        Long systemId = (system == null ? null : system.getId());
-        boolean caiuEmGeral = (systemId == null) || (geralId != null && geralId.equals(systemId));
+        KbArticle existing = repository.findById(dto.getId()).orElse(null);
+        KbArticle entity = metadataMapper.map(dto, existing);
 
-        if (caiuEmGeral) {
-            log.warn("🧭 Caiu em GERAL. id={} menuId={} menuRaw='{}'", id, menuId, menuName);
-        }
+        // ===========================
+        // 4) Classifica (menu → sistema)
+        // ===========================
 
-        log.info("✅ classificado id={} menuId={} menu='{}' systemId={}", id, menuId, menuName, systemId);
+        classificationService.classifyFromMenu(entity, dto.getMenu());
+
+        // ===========================
+        // 5) Detecta conteúdo vazio
+        // ===========================
+
+        checkEmptyContent(entity);
+
+        // ===========================
+        // 6) Marca sync OK
+        // ===========================
+
+        entity.setSyncStatus(SYNC_OK);
+        entity.setSyncErrorMessage(null);
+
+        // marca como "visto" (usado no DELTA)
+        entity.setLastSeenAt(OffsetDateTime.now(ZoneOffset.UTC));
+        entity.setSyncState("SYNCED");
+
+        // ===========================
+        // 7) Salva no banco
+        // ===========================
+
+        KbArticle saved = repository.save(entity);
+
+        log.info("✅ Artigo sincronizado. id={} title='{}'", saved.getId(), saved.getTitle());
+
+        return saved;
     }
 
-    private KbSystem resolveSystemFromMenu(Long menuId, String menuName, Long articleId, KbSystem geral) {
-        if (menuId == null) {
-            issueService.open(articleId, KbSyncIssueType.MENU_NULL,
-                    "Menu veio null (sem source_menu_id)");
-            return geral;
-        }
-
-        var mapOpt = menuMapService.findActive(SOURCE_SYSTEM, menuId);
-        if (mapOpt.isPresent()) {
-            return mapOpt.get().getSystem();
-        }
-
-        issueService.open(articleId, KbSyncIssueType.MENU_NOT_MAPPED,
-                "Menu não mapeado. source_menu_id=" + menuId +
-                        " source_menu_name='" + truncate(menuName, 150) + "'");
-        return geral;
-    }
-
-    /* =========================================================
-       HELPERS
-       ========================================================= */
-
-    private static String truncate(String s, int max) {
-        if (s == null) return null;
-        if (s.length() <= max) return s;
-        return s.substring(0, max);
-    }
-
-    private Long safeMenuId(MovideskArticleSearchItemDto item) {
-        if (item == null || item.getMenu() == null) return null;
-        return item.getMenu().getId();
-    }
-
-    private String safeMenuName(MovideskArticleSearchItemDto item) {
-        if (item == null || item.getMenu() == null) return null;
-        return item.getMenu().getName();
-    }
-
-    private KbSystem getSystemOrThrow(String code) {
-        return systemRepository.findByCode(code)
-                .orElseThrow(() -> new IllegalStateException("Sistema não encontrado no banco: " + code));
-    }
-
+    /**
+     * Atribui manualmente um sistema a um artigo.
+     *
+     * Usado para correções manuais via API.
+     *
+     * @param articleId ID do artigo
+     * @param systemCode código do sistema (ex: NOTAON, SGRH)
+     */
     @Transactional
     public void assignSystem(long articleId, String systemCode) {
         KbArticle article = repository.findById(articleId)
-                .orElseThrow(() -> new IllegalArgumentException("Artigo não encontrado: " + articleId));
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Artigo não encontrado: " + articleId
+                ));
 
-        KbSystem system = systemRepository.findByCode(systemCode)
-                .orElseThrow(() -> new IllegalArgumentException("Sistema não encontrado: " + systemCode));
+        KbSystem system = systemService.getByCodeOrThrow(systemCode);
 
         article.setSystem(system);
         repository.save(article);
+
+        log.info("🔧 Sistema atribuído manualmente. articleId={} systemCode={}",
+                articleId, systemCode);
     }
 
+    /**
+     * Lista artigos sem classificação (system_id null).
+     *
+     * Útil para diagnóstico e correção manual.
+     *
+     * @return até 200 artigos não classificados
+     */
     @Transactional(readOnly = true)
     public List<KbArticle> listUnclassified() {
         return repository.findTop200BySystemIsNullOrderByUpdatedDateDesc();
     }
 
-    // ============================
-    // ✅ HASH HELPERS (NO FINAL!)
-    // ============================
+    // =========================================================
+    // HELPERS PRIVADOS
+    // =========================================================
 
-    private static String normalizeForHash(String s) {
-        if (s == null) return "";
-        return s.replaceAll("\\s+", " ")
-                .trim()
-                .toLowerCase();
+    /**
+     * Trata artigo não encontrado (404).
+     *
+     * - Abre issue NOT_FOUND
+     * - Marca sync_status = NOT_FOUND
+     * - Marca sync_state = MISSING (para delta não tentar de novo)
+     */
+    private void handleNotFound(long articleId) {
+        String msg = "Movidesk 404: Article was not found";
+
+        issueService.open(articleId, KbSyncIssueType.NOT_FOUND, msg);
+
+        repository.findById(articleId).ifPresent(article -> {
+            article.setSyncStatus(SYNC_NOT_FOUND);
+            article.setSyncErrorMessage(truncate(msg, 400));
+            article.setSyncState("MISSING");
+            article.setLastSeenAt(OffsetDateTime.now(ZoneOffset.UTC));
+            repository.save(article);
+        });
     }
 
-    private static String sha256(String s) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] bytes = md.digest(s.getBytes(StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder();
-            for (byte b : bytes) sb.append(String.format("%02x", b));
-            return sb.toString();
-        } catch (Exception e) {
-            throw new RuntimeException("Erro ao gerar SHA-256", e);
+    /**
+     * Trata erro ao buscar artigo (5xx, timeout, etc).
+     *
+     * - Abre issue ERROR
+     * - Marca sync_status = ERROR
+     */
+    private void handleError(long articleId, Exception ex) {
+        String msg = truncate(ex.getMessage(), 400);
+
+        issueService.open(articleId, KbSyncIssueType.ERROR, msg);
+
+        repository.findById(articleId).ifPresent(article -> {
+            article.setSyncStatus(SYNC_ERROR);
+            article.setSyncErrorMessage(msg);
+            repository.save(article);
+        });
+    }
+
+    /**
+     * Detecta conteúdo vazio e abre issue.
+     *
+     * Considera vazio quando:
+     * - contentText vazio E contentHtml vazio
+     */
+    private void checkEmptyContent(KbArticle entity) {
+        int textLen = hashService.cleanLength(entity.getContentText());
+        int htmlLen = hashService.cleanLength(entity.getContentHtml());
+
+        boolean emptyBoth = (textLen == 0 && htmlLen == 0);
+
+        if (emptyBoth) {
+            issueService.open(
+                    entity.getId(),
+                    KbSyncIssueType.EMPTY_CONTENT,
+                    "Artigo com conteúdo vazio (HTML e TEXT)"
+            );
+
+            log.warn("📭 Issue EMPTY_CONTENT. id={} title='{}'",
+                    entity.getId(), entity.getTitle());
         }
+    }
+
+    /**
+     * Trunca string para evitar overflow no banco.
+     */
+    private String truncate(String s, int max) {
+        if (s == null) return null;
+        if (s.length() <= max) return s;
+        return s.substring(0, max);
     }
 }
