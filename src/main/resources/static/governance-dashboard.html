@@ -1,9 +1,11 @@
+
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard de Governança - KB Consisa</title>
+    <title>Governança KB - Análise de Qualidade</title>
     <style>
         * {
             margin: 0;
@@ -11,233 +13,576 @@
             box-sizing: border-box;
         }
 
+        :root {
+            --primary: #667eea;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --info: #3b82f6;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-600: #4b5563;
+            --gray-900: #111827;
+        }
+
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 20px;
+            color: var(--gray-900);
         }
 
         .container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
         }
 
+        /* Header */
         .header {
             background: white;
-            padding: 30px;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.15);
             margin-bottom: 30px;
         }
 
-        .header h1 {
-            color: #2d3748;
-            font-size: 2.5em;
-            margin-bottom: 10px;
-        }
-
-        .header p {
-            color: #718096;
-            font-size: 1.1em;
-        }
-
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-
-        .metric-card {
-            background: white;
-            padding: 25px;
-            border-radius: 15px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-            position: relative;
-            overflow: hidden;
-        }
-
-        .metric-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-        }
-
-        .metric-card.total::before { background: #3b82f6; }
-        .metric-card.ready::before { background: #10b981; }
-        .metric-card.empty::before { background: #ef4444; }
-        .metric-card.short::before { background: #f59e0b; }
-        .metric-card.no-structure::before { background: #6b7280; }
-
-        .metric-label {
-            color: #718096;
-            font-size: 0.9em;
-            margin-bottom: 10px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .metric-value {
-            color: #2d3748;
-            font-size: 2.5em;
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
-
-        .metric-subtitle {
-            color: #a0aec0;
-            font-size: 0.85em;
-        }
-
-        .progress-section {
-            background: white;
-            padding: 30px;
-            border-radius: 15px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-            margin-bottom: 30px;
-        }
-
-        .progress-section h2 {
-            color: #2d3748;
-            margin-bottom: 20px;
-        }
-
-        .progress-bar-container {
-            background: #e2e8f0;
-            height: 40px;
-            border-radius: 20px;
-            overflow: hidden;
-            position: relative;
-        }
-
-        .progress-bar {
-            background: linear-gradient(90deg, #10b981 0%, #059669 100%);
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: width 1s ease;
-            color: white;
-            font-weight: bold;
-            font-size: 1.1em;
-        }
-
-        .issues-section {
-            background: white;
-            padding: 30px;
-            border-radius: 15px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-        }
-
-        .issues-header {
+        .header-top {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 20px;
         }
 
-        .issues-header h2 {
-            color: #2d3748;
+        .header h1 {
+            font-size: 2.5em;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
 
-        .filter-buttons {
+        .export-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .export-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        .header-subtitle {
+            color: var(--gray-600);
+            font-size: 1.1em;
+            margin-bottom: 20px;
+        }
+
+        .status-banner {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            padding: 16px 20px;
+            border-radius: 12px;
+            border-left: 4px solid var(--warning);
             display: flex;
-            gap: 10px;
+            align-items: center;
+            gap: 12px;
         }
 
-        .filter-btn {
-            padding: 8px 16px;
-            border: 2px solid #e2e8f0;
+        .status-banner.success {
+            background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+            border-left-color: var(--success);
+        }
+
+        /* Progress Ring */
+        .progress-ring-container {
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .progress-ring {
+            position: relative;
+            width: 200px;
+            height: 200px;
+            margin: 0 auto 20px;
+        }
+
+        .progress-ring svg {
+            transform: rotate(-90deg);
+        }
+
+        .progress-ring-circle {
+            fill: none;
+            stroke: var(--gray-200);
+            stroke-width: 12;
+        }
+
+        .progress-ring-progress {
+            fill: none;
+            stroke: var(--success);
+            stroke-width: 12;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 1s ease;
+        }
+
+        .progress-ring-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 3em;
+            font-weight: bold;
+            color: var(--success);
+        }
+
+        .progress-label {
+            font-size: 1.2em;
+            color: var(--gray-600);
+            margin-bottom: 8px;
+        }
+
+        .progress-sublabel {
+            color: var(--gray-600);
+            font-size: 0.95em;
+        }
+
+        /* Padrão Esperado */
+        .standard-section {
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+
+        .standard-section h2 {
+            font-size: 1.8em;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .standard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .standard-card {
+            background: var(--gray-50);
+            padding: 24px;
+            border-radius: 12px;
+            border-left: 4px solid var(--info);
+        }
+
+        .standard-card h3 {
+            color: var(--info);
+            margin-bottom: 12px;
+            font-size: 1.1em;
+        }
+
+        .standard-card ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .standard-card li {
+            padding: 8px 0;
+            padding-left: 24px;
+            position: relative;
+        }
+
+        .standard-card li::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: var(--success);
+            font-weight: bold;
+        }
+
+        /* Categorias de Problemas */
+        .problems-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 24px;
+            margin-bottom: 30px;
+        }
+
+        .problem-category {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+            transition: transform 0.3s;
+        }
+
+        .problem-category:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 15px 50px rgba(0,0,0,0.15);
+        }
+
+        .problem-header {
+            padding: 24px;
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .problem-header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: inherit;
+            opacity: 0.9;
+        }
+
+        .problem-header > * {
+            position: relative;
+            z-index: 1;
+        }
+
+        .problem-category.critical .problem-header {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        }
+
+        .problem-category.high .problem-header {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        }
+
+        .problem-category.medium .problem-header {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        }
+
+        .problem-category.info .problem-header {
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+        }
+
+        .problem-title {
+            font-size: 1.3em;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        .problem-count {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        .problem-subtitle {
+            opacity: 0.9;
+            font-size: 0.9em;
+        }
+
+        .problem-body {
+            padding: 24px;
+        }
+
+        .problem-impact {
+            background: var(--gray-50);
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+
+        .problem-impact-title {
+            font-weight: 600;
+            color: var(--gray-900);
+            margin-bottom: 8px;
+        }
+
+        .problem-impact-text {
+            color: var(--gray-600);
+            font-size: 0.9em;
+            line-height: 1.6;
+        }
+
+        .problem-action {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            text-align: center;
+            cursor: pointer;
+            font-weight: 600;
+            transition: transform 0.2s;
+        }
+
+        .problem-action:hover {
+            transform: scale(1.02);
+        }
+
+        /* Breakdown por Sistema */
+        .system-breakdown {
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+
+        .system-breakdown h2 {
+            font-size: 1.8em;
+            margin-bottom: 24px;
+        }
+
+        .system-filters {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+
+        .system-filter-btn {
+            padding: 10px 20px;
+            border: 2px solid var(--gray-200);
             background: white;
             border-radius: 8px;
             cursor: pointer;
             transition: all 0.3s;
-            font-size: 0.9em;
+            font-weight: 500;
         }
 
-        .filter-btn:hover {
-            background: #f7fafc;
+        .system-filter-btn:hover {
+            background: var(--gray-50);
         }
 
-        .filter-btn.active {
-            background: #667eea;
+        .system-filter-btn.active {
+            background: var(--primary);
             color: white;
-            border-color: #667eea;
+            border-color: var(--primary);
         }
 
-        .issues-table {
+        .system-card {
+            background: var(--gray-50);
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 16px;
+        }
+
+        .system-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .system-name {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: var(--gray-900);
+        }
+
+        .system-stats {
+            display: flex;
+            gap: 24px;
+        }
+
+        .system-stat {
+            text-align: center;
+        }
+
+        .system-stat-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: var(--primary);
+        }
+
+        .system-stat-label {
+            font-size: 0.85em;
+            color: var(--gray-600);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .system-progress-bar {
+            height: 8px;
+            background: var(--gray-200);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+
+        .system-progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--success) 0%, #059669 100%);
+            transition: width 1s ease;
+        }
+
+        .system-progress-text {
+            font-size: 0.85em;
+            color: var(--gray-600);
+        }
+
+        /* Tabela Detalhada */
+        .detailed-table {
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+
+        .detailed-table h2 {
+            font-size: 1.8em;
+            margin-bottom: 24px;
+        }
+
+        .table-filters {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .filter-chip {
+            padding: 8px 16px;
+            border-radius: 20px;
+            border: 2px solid var(--gray-200);
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.9em;
+            font-weight: 500;
+        }
+
+        .filter-chip:hover {
+            background: var(--gray-50);
+        }
+
+        .filter-chip.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        .search-box {
+            width: 100%;
+            padding: 12px 20px;
+            border: 2px solid var(--gray-200);
+            border-radius: 8px;
+            font-size: 1em;
+            margin-bottom: 20px;
+            transition: border-color 0.3s;
+        }
+
+        .search-box:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        table {
             width: 100%;
             border-collapse: collapse;
         }
 
-        .issues-table th {
-            background: #f7fafc;
-            padding: 15px;
+        thead {
+            background: var(--gray-50);
+        }
+
+        th {
+            padding: 16px;
             text-align: left;
-            color: #4a5568;
             font-weight: 600;
-            border-bottom: 2px solid #e2e8f0;
+            color: var(--gray-900);
+            border-bottom: 2px solid var(--gray-200);
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
-        .issues-table td {
-            padding: 15px;
-            border-bottom: 1px solid #e2e8f0;
+        td {
+            padding: 16px;
+            border-bottom: 1px solid var(--gray-200);
         }
 
-        .issues-table tr:hover {
-            background: #f7fafc;
+        tbody tr {
+            transition: background 0.2s;
+        }
+
+        tbody tr:hover {
+            background: var(--gray-50);
+        }
+
+        .article-title {
+            font-weight: 600;
+            color: var(--gray-900);
+            margin-bottom: 4px;
+        }
+
+        .article-id {
+            font-size: 0.85em;
+            color: var(--gray-600);
         }
 
         .badge {
             display: inline-block;
             padding: 4px 12px;
             border-radius: 12px;
-            font-size: 0.8em;
+            font-size: 0.75em;
             font-weight: 600;
             margin: 2px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
-        .badge.vazio { background: #fee2e2; color: #991b1b; }
-        .badge.curto { background: #fef3c7; color: #92400e; }
-        .badge.duplicado { background: #e9d5ff; color: #6b21a8; }
-        .badge.sem-estrutura { background: #e5e7eb; color: #1f2937; }
+        .badge.critical { background: #fee2e2; color: #991b1b; }
+        .badge.high { background: #fef3c7; color: #92400e; }
+        .badge.medium { background: #dbeafe; color: #1e40af; }
+        .badge.info { background: #e9d5ff; color: #6b21a8; }
 
-        .score-bar {
-            width: 100px;
-            height: 8px;
-            background: #e2e8f0;
-            border-radius: 4px;
-            overflow: hidden;
-            display: inline-block;
-            vertical-align: middle;
-            margin-right: 8px;
+        .score-circle {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.1em;
         }
 
-        .score-fill {
-            height: 100%;
-            transition: width 0.5s;
+        .score-circle.high { background: #d1fae5; color: #065f46; }
+        .score-circle.medium { background: #fef3c7; color: #92400e; }
+        .score-circle.low { background: #fee2e2; color: #991b1b; }
+
+        .action-link {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s;
         }
 
-        .score-fill.high { background: #10b981; }
-        .score-fill.medium { background: #f59e0b; }
-        .score-fill.low { background: #ef4444; }
+        .action-link:hover {
+            color: #764ba2;
+            text-decoration: underline;
+        }
 
+        /* Loading */
         .loading {
             text-align: center;
-            padding: 40px;
-            color: #718096;
+            padding: 60px 20px;
         }
 
         .spinner {
-            border: 4px solid #e2e8f0;
-            border-top: 4px solid #667eea;
+            border: 4px solid var(--gray-200);
+            border-top: 4px solid var(--primary);
             border-radius: 50%;
-            width: 40px;
-            height: 40px;
+            width: 50px;
+            height: 50px;
             animation: spin 1s linear infinite;
             margin: 0 auto 20px;
         }
@@ -247,14 +592,12 @@
             100% { transform: rotate(360deg); }
         }
 
-        .btn-link {
-            color: #667eea;
-            text-decoration: none;
-            font-weight: 500;
-        }
-
-        .btn-link:hover {
-            text-decoration: underline;
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header h1 { font-size: 1.8em; }
+            .problems-section { grid-template-columns: 1fr; }
+            .standard-grid { grid-template-columns: 1fr; }
+            .system-stats { flex-direction: column; gap: 12px; }
         }
     </style>
 </head>
@@ -262,56 +605,131 @@
 <div class="container">
     <!-- Header -->
     <div class="header">
-        <h1>📊 Dashboard de Governança da KB</h1>
-        <p>Análise de qualidade dos manuais para preparação IA</p>
+        <div class="header-top">
+            <h1>📊 Governança da Knowledge Base</h1>
+            <button class="export-btn" onclick="exportReport()">
+                📥 Exportar Relatório
+            </button>
+        </div>
+        <p class="header-subtitle">Análise de qualidade dos manuais para preparação IA</p>
+        <div id="statusBanner" class="status-banner">
+            <span style="font-size: 1.5em;">⚠️</span>
+            <div>
+                <strong>Ação Necessária:</strong>
+                <span id="statusText">Carregando...</span>
+            </div>
+        </div>
     </div>
 
-    <!-- Métricas -->
-    <div class="metrics-grid" id="metrics">
+    <!-- Progress Ring -->
+    <div class="progress-ring-container">
+        <h2 class="progress-label">🎯 Progresso IA-Ready</h2>
+        <div class="progress-ring">
+            <svg width="200" height="200">
+                <circle class="progress-ring-circle" cx="100" cy="100" r="90"></circle>
+                <circle id="progressCircle" class="progress-ring-progress" cx="100" cy="100" r="90"
+                        stroke-dasharray="565.48" stroke-dashoffset="565.48"></circle>
+            </svg>
+            <div class="progress-ring-text" id="progressPercent">0%</div>
+        </div>
+        <p class="progress-sublabel" id="progressText">Calculando...</p>
+    </div>
+
+    <!-- Padrão Esperado -->
+    <div class="standard-section">
+        <h2>📋 Padrão Esperado para Todos os Manuais</h2>
+        <div class="standard-grid">
+            <div class="standard-card">
+                <h3>1. Estrutura Mínima</h3>
+                <ul>
+                    <li>Introdução (O que é / Quando usar)</li>
+                    <li>Pré-requisitos</li>
+                    <li>Passo a passo detalhado</li>
+                    <li>Observações importantes</li>
+                    <li>Erros comuns / Dúvidas frequentes</li>
+                </ul>
+            </div>
+
+            <div class="standard-card">
+                <h3>2. Conteúdo</h3>
+                <ul>
+                    <li>Mínimo de 600 caracteres</li>
+                    <li>Linguagem clara e objetiva</li>
+                    <li>Passos numerados ou marcadores</li>
+                    <li>Contexto do sistema/módulo</li>
+                    <li>Exemplos práticos</li>
+                </ul>
+            </div>
+
+            <div class="standard-card">
+                <h3>3. Qualidade</h3>
+                <ul>
+                    <li>Sem duplicatas no mesmo sistema</li>
+                    <li>Informações atualizadas</li>
+                    <li>Imagens com descrição</li>
+                    <li>Verbos de ação (clique, acesse, etc)</li>
+                    <li>Headers para segmentação</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Categorias de Problemas -->
+    <div class="problems-section" id="problemsSection">
         <div class="loading">
             <div class="spinner"></div>
-            Carregando estatísticas...
+            <p>Analisando problemas...</p>
         </div>
     </div>
 
-    <!-- Progresso IA-Ready -->
-    <div class="progress-section" id="progress-section" style="display: none;">
-        <h2>🤖 Progresso IA-Ready</h2>
-        <div class="progress-bar-container">
-            <div class="progress-bar" id="progress-bar">0%</div>
+    <!-- Breakdown por Sistema -->
+    <div class="system-breakdown">
+        <h2>🏢 Análise por Sistema</h2>
+        <div class="system-filters" id="systemFilters">
+            <button class="system-filter-btn active" onclick="filterBySystem('all')">Todos os Sistemas</button>
         </div>
-        <p style="margin-top: 10px; color: #718096;" id="progress-text"></p>
-    </div>
-
-    <!-- Tabela de Issues -->
-    <div class="issues-section" id="issues-section" style="display: none;">
-        <div class="issues-header">
-            <h2>⚠️ Artigos com Problemas</h2>
-            <div class="filter-buttons">
-                <button class="filter-btn active" onclick="filterIssues('all')">Todos</button>
-                <button class="filter-btn" onclick="filterIssues('empty')">Vazios</button>
-                <button class="filter-btn" onclick="filterIssues('short')">Curtos</button>
-                <button class="filter-btn" onclick="filterIssues('duplicate')">Duplicados</button>
-                <button class="filter-btn" onclick="filterIssues('no-structure')">Sem Estrutura</button>
+        <div id="systemCards">
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>Carregando sistemas...</p>
             </div>
+        </div>
+    </div>
+
+    <!-- Tabela Detalhada -->
+    <div class="detailed-table">
+        <h2>📝 Artigos que Precisam de Ação</h2>
+
+        <input type="text" class="search-box" id="searchBox" placeholder="🔍 Buscar por título, ID ou sistema...">
+
+        <div class="table-filters">
+            <span class="filter-chip active" onclick="filterTable('all')">Todos</span>
+            <span class="filter-chip" onclick="filterTable('critical')">Críticos</span>
+            <span class="filter-chip" onclick="filterTable('empty')">Vazios</span>
+            <span class="filter-chip" onclick="filterTable('short')">Curtos</span>
+            <span class="filter-chip" onclick="filterTable('duplicate')">Duplicados</span>
+            <span class="filter-chip" onclick="filterTable('no-structure')">Sem Estrutura</span>
         </div>
 
         <div style="overflow-x: auto;">
-            <table class="issues-table">
+            <table>
                 <thead>
                 <tr>
                     <th>Artigo</th>
                     <th>Sistema</th>
                     <th>Problemas</th>
                     <th>Score</th>
+                    <th>Prioridade</th>
                     <th>Ações</th>
                 </tr>
                 </thead>
-                <tbody id="issues-tbody">
+                <tbody id="tableBody">
                 <tr>
-                    <td colspan="5" class="loading">
-                        <div class="spinner"></div>
-                        Carregando artigos...
+                    <td colspan="6">
+                        <div class="loading">
+                            <div class="spinner"></div>
+                            <p>Carregando artigos...</p>
+                        </div>
                     </td>
                 </tr>
                 </tbody>
@@ -322,60 +740,145 @@
 
 <script>
     let allIssues = [];
+    let stats = {};
+    let currentFilter = 'all';
+    let currentSystemFilter = 'all';
 
-    // Carrega dados ao iniciar
-    async function loadDashboard() {
-        await loadStats();
-        await loadIssues();
+    // Inicialização
+    async function init() {
+        await Promise.all([
+            loadStats(),
+            loadIssues()
+        ]);
+
+        // Busca em tempo real
+        document.getElementById('searchBox').addEventListener('input', (e) => {
+            filterTableBySearch(e.target.value);
+        });
     }
 
     // Carrega estatísticas
     async function loadStats() {
         try {
             const res = await fetch('/kb/governance/report/stats');
-            const stats = await res.json();
+            stats = await res.json();
 
-            // Atualiza métricas
-            document.getElementById('metrics').innerHTML = `
-                    <div class="metric-card total">
-                        <div class="metric-label">Total de Artigos</div>
-                        <div class="metric-value">${stats.total.toLocaleString()}</div>
-                    </div>
-
-                    <div class="metric-card ready">
-                        <div class="metric-label">IA Ready</div>
-                        <div class="metric-value">${stats.iaReadyCount.toLocaleString()}</div>
-                        <div class="metric-subtitle">${stats.iaReadyPercentage}%</div>
-                    </div>
-
-                    <div class="metric-card empty">
-                        <div class="metric-label">Vazios</div>
-                        <div class="metric-value">${stats.emptyCount.toLocaleString()}</div>
-                    </div>
-
-                    <div class="metric-card short">
-                        <div class="metric-label">Curtos</div>
-                        <div class="metric-value">${stats.shortCount.toLocaleString()}</div>
-                    </div>
-
-                    <div class="metric-card no-structure">
-                        <div class="metric-label">Sem Estrutura</div>
-                        <div class="metric-value">${stats.noStructureCount.toLocaleString()}</div>
-                    </div>
-                `;
-
-            // Atualiza progresso
-            document.getElementById('progress-section').style.display = 'block';
-            document.getElementById('progress-bar').style.width = stats.iaReadyPercentage + '%';
-            document.getElementById('progress-bar').textContent = stats.iaReadyPercentage + '%';
-            document.getElementById('progress-text').textContent =
-                `${stats.iaReadyCount} de ${stats.total} artigos prontos para IA`;
+            updateProgressRing(stats.iaReadyPercentage);
+            updateStatusBanner(stats);
+            updateProblemsSection(stats);
 
         } catch (error) {
             console.error('Erro ao carregar stats:', error);
-            document.getElementById('metrics').innerHTML =
-                '<div class="loading">❌ Erro ao carregar estatísticas</div>';
         }
+    }
+
+    // Atualiza anel de progresso
+    function updateProgressRing(percentage) {
+        const circle = document.getElementById('progressCircle');
+        const text = document.getElementById('progressPercent');
+        const subtext = document.getElementById('progressText');
+
+        const circumference = 565.48;
+        const offset = circumference - (percentage / 100 * circumference);
+
+        circle.style.strokeDashoffset = offset;
+        text.textContent = Math.round(percentage) + '%';
+        subtext.textContent = `${stats.iaReadyCount} de ${stats.total} artigos prontos para IA`;
+
+        // Muda cor baseado no progresso
+        if (percentage >= 80) {
+            circle.style.stroke = 'var(--success)';
+            text.style.color = 'var(--success)';
+        } else if (percentage >= 60) {
+            circle.style.stroke = 'var(--warning)';
+            text.style.color = 'var(--warning)';
+        } else {
+            circle.style.stroke = 'var(--danger)';
+            text.style.color = 'var(--danger)';
+        }
+    }
+
+    // Atualiza banner de status
+    function updateStatusBanner(stats) {
+        const banner = document.getElementById('statusBanner');
+        const text = document.getElementById('statusText');
+
+        const totalProblems = stats.emptyCount + stats.duplicateCount + stats.noStructureCount;
+
+        if (totalProblems === 0) {
+            banner.className = 'status-banner success';
+            text.textContent = 'Parabéns! Todos os manuais estão no padrão esperado.';
+        } else {
+            banner.className = 'status-banner';
+            text.textContent = `${totalProblems} artigos precisam ser ajustados ao padrão.`;
+        }
+    }
+
+    // Atualiza seção de problemas
+    function updateProblemsSection(stats) {
+        const section = document.getElementById('problemsSection');
+
+        const problems = [
+            {
+                class: 'critical',
+                icon: '🚨',
+                title: 'Manuais Vazios',
+                count: stats.emptyCount,
+                subtitle: 'SEM conteúdo (HTML e TEXT)',
+                impact: 'Impossível usar para IA ou suporte',
+                action: 'URGENTE: Escrever conteúdo completo',
+                filter: 'empty'
+            },
+            {
+                class: 'critical',
+                icon: '📑',
+                title: 'Sem Estrutura Mínima',
+                count: stats.noStructureCount,
+                subtitle: 'Falta segmentação, orientação ou contexto',
+                impact: 'IA não consegue extrair informações estruturadas',
+                action: 'Adicionar headers, listas e passos',
+                filter: 'no-structure'
+            },
+            {
+                class: 'high',
+                icon: '📏',
+                title: 'Conteúdo Curto',
+                count: stats.shortCount,
+                subtitle: 'Menos de 600 caracteres',
+                impact: 'Informação insuficiente para resolver dúvidas',
+                action: 'Expandir com detalhes e exemplos',
+                filter: 'short'
+            },
+            {
+                class: 'medium',
+                icon: '📋',
+                title: 'Duplicados',
+                count: stats.duplicateCount,
+                subtitle: 'Mesmo conteúdo no mesmo sistema',
+                impact: 'Confusão e manutenção duplicada',
+                action: 'Consolidar em um único manual',
+                filter: 'duplicate'
+            }
+        ];
+
+        section.innerHTML = problems.map(p => `
+            <div class="problem-category ${p.class}">
+                <div class="problem-header">
+                    <div class="problem-title">${p.icon} ${p.title}</div>
+                    <div class="problem-count">${p.count.toLocaleString()}</div>
+                    <div class="problem-subtitle">${p.subtitle}</div>
+                </div>
+                <div class="problem-body">
+                    <div class="problem-impact">
+                        <div class="problem-impact-title">💥 Impacto</div>
+                        <div class="problem-impact-text">${p.impact}</div>
+                    </div>
+                    <div class="problem-action" onclick="filterTable('${p.filter}')">
+                        ✏️ ${p.action}
+                    </div>
+                </div>
+            </div>
+        `).join('');
     }
 
     // Carrega issues
@@ -384,82 +887,263 @@
             const res = await fetch('/kb/governance/report/issues');
             allIssues = await res.json();
 
-            document.getElementById('issues-section').style.display = 'block';
-            renderIssues(allIssues);
+            updateSystemBreakdown();
+            renderTable();
 
         } catch (error) {
             console.error('Erro ao carregar issues:', error);
-            document.getElementById('issues-tbody').innerHTML =
-                '<tr><td colspan="5" class="loading">❌ Erro ao carregar artigos</td></tr>';
         }
     }
 
-    // Renderiza tabela de issues
-    function renderIssues(issues) {
-        const tbody = document.getElementById('issues-tbody');
+    // Atualiza breakdown por sistema
+    function updateSystemBreakdown() {
+        // Agrupa por sistema
+        const systemsMap = new Map();
 
-        if (issues.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 40px; color: #10b981;">✅ Nenhum artigo com problemas!</td></tr>';
+        allIssues.forEach(issue => {
+            const system = issue.systemCode || 'GERAL';
+            if (!systemsMap.has(system)) {
+                systemsMap.set(system, {
+                    name: issue.systemName || system,
+                    total: 0,
+                    ready: 0,
+                    problems: 0
+                });
+            }
+
+            const sys = systemsMap.get(system);
+            sys.total++;
+            if (issue.iaReady) sys.ready++;
+            else sys.problems++;
+        });
+
+        // Renderiza filtros
+        const filters = document.getElementById('systemFilters');
+        filters.innerHTML = `
+            <button class="system-filter-btn active" onclick="filterBySystem('all')">
+                Todos os Sistemas (${allIssues.length})
+            </button>
+        ` + Array.from(systemsMap.entries())
+            .sort((a, b) => b[1].problems - a[1].problems)
+            .map(([code, data]) => `
+                <button class="system-filter-btn" onclick="filterBySystem('${code}')">
+                    ${data.name} (${data.problems})
+                </button>
+            `).join('');
+
+        // Renderiza cards de sistema
+        const cards = document.getElementById('systemCards');
+        cards.innerHTML = Array.from(systemsMap.entries())
+            .sort((a, b) => b[1].problems - a[1].problems)
+            .map(([code, data]) => {
+                const percentage = Math.round((data.ready / data.total) * 100);
+                return `
+                    <div class="system-card" data-system="${code}">
+                        <div class="system-card-header">
+                            <div class="system-name">${data.name}</div>
+                            <div class="system-stats">
+                                <div class="system-stat">
+                                    <div class="system-stat-value">${data.total}</div>
+                                    <div class="system-stat-label">Total</div>
+                                </div>
+                                <div class="system-stat">
+                                    <div class="system-stat-value" style="color: var(--success)">${data.ready}</div>
+                                    <div class="system-stat-label">OK</div>
+                                </div>
+                                <div class="system-stat">
+                                    <div class="system-stat-value" style="color: var(--danger)">${data.problems}</div>
+                                    <div class="system-stat-label">Problemas</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="system-progress-bar">
+                            <div class="system-progress-fill" style="width: ${percentage}%"></div>
+                        </div>
+                        <div class="system-progress-text">${percentage}% dos artigos prontos para IA</div>
+                    </div>
+                `;
+            }).join('');
+    }
+
+    // Filtra por sistema
+    function filterBySystem(system) {
+        currentSystemFilter = system;
+
+        // Atualiza botões
+        document.querySelectorAll('.system-filter-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        event.target.classList.add('active');
+
+        // Atualiza cards
+        document.querySelectorAll('.system-card').forEach(card => {
+            if (system === 'all' || card.dataset.system === system) {
+                card.style.display = 'block';
+            } else {
+                card.style.display = 'none';
+            }
+        });
+
+        renderTable();
+    }
+
+    // Renderiza tabela
+    function renderTable() {
+        let filtered = allIssues.filter(issue => !issue.iaReady);
+
+        // Filtro por tipo
+        if (currentFilter === 'critical') {
+            filtered = filtered.filter(i => i.qualityScore < 40);
+        } else if (currentFilter === 'empty') {
+            filtered = filtered.filter(i => i.isEmpty);
+        } else if (currentFilter === 'short') {
+            filtered = filtered.filter(i => i.isTooShort);
+        } else if (currentFilter === 'duplicate') {
+            filtered = filtered.filter(i => i.isDuplicateSameSystem);
+        } else if (currentFilter === 'no-structure') {
+            filtered = filtered.filter(i => i.lacksMinStructure);
+        }
+
+        // Filtro por sistema
+        if (currentSystemFilter !== 'all') {
+            filtered = filtered.filter(i => i.systemCode === currentSystemFilter);
+        }
+
+        const tbody = document.getElementById('tableBody');
+
+        if (filtered.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="6" style="text-align: center; padding: 60px; color: var(--success);">
+                        ✅ Nenhum artigo com problemas neste filtro!
+                    </td>
+                </tr>
+            `;
             return;
         }
 
-        tbody.innerHTML = issues.slice(0, 100).map(issue => `
+        tbody.innerHTML = filtered.slice(0, 200).map(issue => {
+            const scoreClass = issue.qualityScore >= 60 ? 'high' : issue.qualityScore >= 40 ? 'medium' : 'low';
+            const priority = issue.qualityScore < 40 ? 'CRÍTICO' : issue.qualityScore < 60 ? 'ALTO' : 'MÉDIO';
+            const priorityClass = issue.qualityScore < 40 ? 'critical' : issue.qualityScore < 60 ? 'high' : 'medium';
+
+            return `
                 <tr>
                     <td>
-                        <strong>${issue.title || 'Sem título'}</strong><br>
-                        <small style="color: #a0aec0;">ID: ${issue.articleId}</small>
+                        <div class="article-title">${escapeHtml(issue.title || 'Sem título')}</div>
+                        <div class="article-id">ID: ${issue.articleId}</div>
                     </td>
                     <td>${issue.systemCode || 'N/A'}</td>
                     <td>
-                        ${issue.actions.map(action => {
-            const badgeClass = action.includes('VAZIO') ? 'vazio' :
-                action.includes('CURTO') ? 'curto' :
-                    action.includes('DUPLICADO') ? 'duplicado' :
-                        'sem-estrutura';
-            const label = action.replace('MANUAL_', '').replace('_', ' ');
-            return `<span class="badge ${badgeClass}">${label}</span>`;
-        }).join('')}
+                        ${getBadgesHtml(issue)}
                     </td>
                     <td>
-                        <div class="score-bar">
-                            <div class="score-fill ${issue.qualityScore >= 80 ? 'high' : issue.qualityScore >= 60 ? 'medium' : 'low'}"
-                                 style="width: ${issue.qualityScore}%"></div>
-                        </div>
-                        <span style="font-weight: 600; color: ${issue.qualityScore >= 80 ? '#10b981' : issue.qualityScore >= 60 ? '#f59e0b' : '#ef4444'}">
+                        <div class="score-circle ${scoreClass}">
                             ${issue.qualityScore}
-                        </span>
+                        </div>
                     </td>
                     <td>
-                        <a href="${issue.sourceUrl}" target="_blank" class="btn-link">Ver no Movidesk</a>
+                        <span class="badge ${priorityClass}">${priority}</span>
+                    </td>
+                    <td>
+                        <a href="${issue.sourceUrl}" target="_blank" class="action-link">
+                            ✏️ Editar Manual
+                        </a>
                     </td>
                 </tr>
-            `).join('');
+            `;
+        }).join('');
     }
 
-    // Filtro de issues
-    function filterIssues(type) {
-        // Atualiza botões ativos
-        document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
-        event.target.classList.add('active');
+    // Gera badges dos problemas
+    function getBadgesHtml(issue) {
+        const badges = [];
 
-        // Filtra issues
-        let filtered = allIssues;
-
-        if (type === 'empty') {
-            filtered = allIssues.filter(i => i.actions.includes('MANUAL_VAZIO'));
-        } else if (type === 'short') {
-            filtered = allIssues.filter(i => i.actions.includes('MANUAL_CURTO_DEMAIS'));
-        } else if (type === 'duplicate') {
-            filtered = allIssues.filter(i => i.actions.includes('MANUAL_DUPLICADO_NO_MESMO_SISTEMA'));
-        } else if (type === 'no-structure') {
-            filtered = allIssues.filter(i => i.actions.includes('MANUAL_SEM_ESTRUTURA_MINIMA'));
+        if (issue.isEmpty) {
+            badges.push('<span class="badge critical">VAZIO</span>');
+        }
+        if (issue.isTooShort) {
+            badges.push('<span class="badge high">CURTO</span>');
+        }
+        if (issue.isDuplicateSameSystem) {
+            badges.push('<span class="badge medium">DUPLICADO</span>');
+        }
+        if (issue.lacksMinStructure) {
+            badges.push('<span class="badge critical">SEM ESTRUTURA</span>');
         }
 
-        renderIssues(filtered);
+        return badges.join(' ') || '<span class="badge info">OK</span>';
     }
 
-    // Carrega ao abrir a página
-    loadDashboard();
+    // Filtra tabela por tipo
+    function filterTable(type) {
+        currentFilter = type;
+
+        // Atualiza chips
+        document.querySelectorAll('.filter-chip').forEach(chip => {
+            chip.classList.remove('active');
+        });
+        event.target.classList.add('active');
+
+        renderTable();
+    }
+
+    // Filtro de busca
+    function filterTableBySearch(query) {
+        const tbody = document.getElementById('tableBody');
+        const rows = tbody.getElementsByTagName('tr');
+
+        const lowerQuery = query.toLowerCase();
+
+        for (let row of rows) {
+            const text = row.textContent.toLowerCase();
+            row.style.display = text.includes(lowerQuery) ? '' : 'none';
+        }
+    }
+
+    // Exporta relatório
+    function exportReport() {
+        const csv = generateCSV();
+        downloadCSV(csv, 'relatorio-governanca-kb.csv');
+    }
+
+    // Gera CSV
+    function generateCSV() {
+        const headers = ['ID', 'Título', 'Sistema', 'Score', 'Vazio', 'Curto', 'Duplicado', 'Sem Estrutura', 'URL'];
+        const rows = allIssues.map(issue => [
+            issue.articleId,
+            `"${(issue.title || '').replace(/"/g, '""')}"`,
+            issue.systemCode || '',
+            issue.qualityScore,
+            issue.isEmpty ? 'SIM' : 'NÃO',
+            issue.isTooShort ? 'SIM' : 'NÃO',
+            issue.isDuplicateSameSystem ? 'SIM' : 'NÃO',
+            issue.lacksMinStructure ? 'SIM' : 'NÃO',
+            issue.sourceUrl
+        ]);
+
+        return [headers, ...rows].map(row => row.join(',')).join('\n');
+    }
+
+    // Download CSV
+    function downloadCSV(csv, filename) {
+        const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        link.click();
+    }
+
+    // Escape HTML
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // Inicializa ao carregar
+    init();
 </script>
 </body>
 </html>
+
