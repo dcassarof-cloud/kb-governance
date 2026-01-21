@@ -4,6 +4,7 @@ import br.com.consisa.gov.kb.domain.KbArticle;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -11,9 +12,13 @@ import java.time.OffsetDateTime;
 import java.util.List;
 
 /**
- * Repositório JPA para acesso à tabela kb_article.
+ * ✅ VERSÃO MELHORADA com queries adicionais para sync
  */
 public interface KbArticleRepository extends JpaRepository<KbArticle, Long> {
+
+    // =========================
+    // ✅ QUERIES ORIGINAIS
+    // =========================
 
     List<KbArticle> findTop200BySystemIsNullOrderByUpdatedDateDesc();
 
@@ -26,7 +31,6 @@ public interface KbArticleRepository extends JpaRepository<KbArticle, Long> {
     """)
     List<Long> findIdsForDeltaSince(@Param("since") OffsetDateTime since);
 
-
     @Query("""
     select a
     from KbArticle a
@@ -34,7 +38,6 @@ public interface KbArticleRepository extends JpaRepository<KbArticle, Long> {
       and a.contentHash <> ''
 """)
     List<KbArticle> findAllWithContentHash();
-
 
     @Query("""
         select a.id
@@ -45,6 +48,7 @@ public interface KbArticleRepository extends JpaRepository<KbArticle, Long> {
             or a.system is null
     """)
     List<Long> findDeltaIds(@Param("since") OffsetDateTime since);
+
     List<KbArticle> findByContentHash(String contentHash);
 
     @Query("""
@@ -53,10 +57,6 @@ public interface KbArticleRepository extends JpaRepository<KbArticle, Long> {
         where a.system.code = 'GERAL'
     """)
     List<Long> findIdsInGeral();
-
-    // =========================
-    // ✅ DUPLICADOS (por hash)
-    // =========================
 
     @Query("""
             select a.contentHash
@@ -88,13 +88,149 @@ public interface KbArticleRepository extends JpaRepository<KbArticle, Long> {
 """)
     List<Long> findArticleIdsByContentHash(@Param("hash") String hash);
 
-    // =========================
-    // ✅ RECENTES (para análise)
-    // =========================
     @Query("""
         select a
         from KbArticle a
         order by coalesce(a.updatedDate, a.createdDate) desc
     """)
     Page<KbArticle> findRecent(Pageable pageable);
+
+    // =========================
+    // ✅ NOVAS QUERIES (V2)
+    // =========================
+
+    /**
+     * 🗑️ Marca artigos como MISSING quando não foram vistos há muito tempo.
+     *
+     * Usado após FULL SYNC para detectar artigos deletados no Movidesk.
+     *
+     * @param cutoff data limite (ex: agora - 2 horas)
+     * @return quantidade de artigos marcados
+     */
+    @Modifying
+    @Query("""
+        update KbArticle a
+        set a.syncState = 'MISSING',
+            a.syncStatus = 'NOT_FOUND'
+        where a.lastSeenAt < :cutoff
+          and a.syncState <> 'MISSING'
+          and a.articleStatus = 1
+    """)
+    int markMissingArticles(@Param("cutoff") OffsetDateTime cutoff);
+
+    /**
+     * 🔍 Busca artigos que falharam no último sync.
+     *
+     * Útil para retry automático.
+     *
+     * @param limit máximo de artigos
+     */
+    @Query("""
+        select a.id
+        from KbArticle a
+        where a.syncStatus = 'ERROR'
+          and a.articleStatus = 1
+        order by a.updatedDate desc
+    """)
+    List<Long> findFailedArticles(Pageable pageable);
+
+    /**
+     * 📊 Estatísticas de sync por status.
+     */
+    @Query("""
+        select a.syncStatus, count(a)
+        from KbArticle a
+        where a.articleStatus = 1
+        group by a.syncStatus
+    """)
+    List<Object[]> countBySyncStatus();
+
+    /**
+     * 📊 Estatísticas de sync por estado.
+     */
+    @Query("""
+        select a.syncState, count(a)
+        from KbArticle a
+        where a.articleStatus = 1
+        group by a.syncState
+    """)
+    List<Object[]> countBySyncState();
+
+    /**
+     * 🔄 Busca IDs de artigos para DELTA inteligente.
+     *
+     * Inclui:
+     * - Artigos alterados desde :since
+     * - Artigos com erro de sync
+     * - Artigos sem classificação
+     * - Artigos nunca sincronizados
+     *
+     * @param since data de corte
+     * @param limit máximo de IDs
+     */
+    @Query("""
+        select distinct a.id
+        from KbArticle a
+        where a.articleStatus = 1
+          and (
+              a.updatedDate >= :since
+              or a.syncStatus <> 'OK'
+              or a.system is null
+              or a.lastSeenAt is null
+          )
+        order by coalesce(a.updatedDate, a.createdDate) desc
+    """)
+    List<Long> findDeltaSmartIds(@Param("since") OffsetDateTime since, Pageable pageable);
+
+    /**
+     * 📈 Conta artigos por sistema e status de sync.
+     *
+     * Útil para dashboard.
+     */
+    @Query("""
+        select s.code, a.syncStatus, count(a)
+        from KbArticle a
+        left join a.system s
+        where a.articleStatus = 1
+        group by s.code, a.syncStatus
+        order by s.code, a.syncStatus
+    """)
+    List<Object[]> countBySystemAndSyncStatus();
+
+    /**
+     * 🎯 Busca artigos prontos para análise de governança.
+     *
+     * Critérios:
+     * - sync_status = OK
+     * - conteúdo não vazio
+     * - sistema classificado
+     */
+    @Query("""
+        select a
+        from KbArticle a
+        where a.articleStatus = 1
+          and a.syncStatus = 'OK'
+          and a.contentHash is not null
+          and a.system is not null
+        order by a.updatedDate desc
+    """)
+    Page<KbArticle> findReadyForGovernance(Pageable pageable);
+
+    /**
+     * 🔄 Busca artigos para retry (falharam mas não há issue aberta).
+     */
+    @Query("""
+        select a.id
+        from KbArticle a
+        where a.syncStatus = 'ERROR'
+          and a.articleStatus = 1
+          and not exists (
+              select 1
+              from KbSyncIssue i
+              where i.articleId = a.id
+                and i.resolved = false
+          )
+        order by a.updatedDate desc
+    """)
+    List<Long> findArticlesForRetry(Pageable pageable);
 }
