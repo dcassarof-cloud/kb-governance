@@ -4,23 +4,13 @@ import br.com.consisa.gov.kb.client.movidesk.*;
 import br.com.consisa.gov.kb.domain.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 🎫 Service de Integração com Tickets do Movidesk
- *
- * RESPONSABILIDADES:
- * ------------------
- * - Criar tickets automaticamente para atribuições
- * - Montar corpo do ticket com informações relevantes
- * - Gerar URL do ticket
- * - Atualizar assignment com ticket_id e ticket_url
- *
- * QUANDO USAR:
- * ------------
- * - Após criar uma atribuição (manual ou automática)
- * - Para gerar tarefa trackável no Movidesk
  */
 @Service
 public class MovideskTicketService {
@@ -30,8 +20,21 @@ public class MovideskTicketService {
     private static final String TICKET_BASE_URL = "https://consisanet.movidesk.com/Ticket/Edit/";
     private static final String KB_BASE_URL = "https://consisanet.movidesk.com/kb/pt-br/article/";
 
-    // Categoria padrão para tarefas de atualização de KB
-    private static final String CATEGORY_KB_UPDATE = "Base de Conhecimento";
+    // ========================================
+    // CONFIGURAÇÕES
+    // ========================================
+
+    @Value("${movidesk.ticket.service:Base de Conhecimento}")
+    private String ticketService;
+
+    @Value("${movidesk.ticket.category:Governança}")
+    private String ticketCategory;
+
+    @Value("${movidesk.ticket.client-id}")
+    private String defaultClientId;
+
+    @Value("${movidesk.ticket.default-team:ERP - EMPRESARIAL}")
+    private String defaultTeam;
 
     private final MovideskClient movideskClient;
 
@@ -41,12 +44,8 @@ public class MovideskTicketService {
 
     /**
      * Cria ticket no Movidesk para uma atribuição
-     *
-     * @param assignment atribuição para gerar ticket
-     * @param articleTitle título do artigo (para incluir no assunto)
-     * @return resposta do Movidesk com ID e protocolo do ticket
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public MovideskTicketResponse createTicketForAssignment(
             KbArticleAssignment assignment,
             String articleTitle
@@ -54,26 +53,48 @@ public class MovideskTicketService {
         log.info("🎫 Criando ticket para atribuição: assignmentId={} articleId={}",
                 assignment.getId(), assignment.getArticleId());
 
-        // Monta assunto do ticket
+        // Validações
+        if (defaultClientId == null || defaultClientId.isBlank()) {
+            throw new IllegalStateException(
+                    "movidesk.ticket.client-id não está configurado. " +
+                            "Configure no application.properties"
+            );
+        }
+
+        // Monta dados do ticket
         String subject = buildTicketSubject(assignment, articleTitle);
-
-        // Monta descrição/justificativa
         String description = buildTicketDescription(assignment, articleTitle);
-
-        // Determina urgência baseada na prioridade
         String urgency = mapPriorityToUrgency(assignment.getPriority());
+        String ownerTeam = resolveOwnerTeam(assignment.getAgent());
+        String ownerId = assignment.getAgent().getId();
 
-        // Monta request
+        // ========================================
+        // CORREÇÃO: Status e Category em PORTUGUÊS
+        // ========================================
+
         MovideskTicketRequest request = new MovideskTicketRequest.Builder()
+                // Básicos
                 .subject(subject)
-                .category(CATEGORY_KB_UPDATE)
                 .urgency(urgency)
                 .justification(description)
-                .addAction(description)
+
+                // ⚠️ OBRIGATÓRIOS
+                .serviceFirstLevel(ticketService)
+                .addClient(defaultClientId)
+                .ownerTeam(ownerTeam)
+                .owner(ownerId)
+                .createdBy(ownerId)
+                .addAction(description, ownerId)  // ✅ Com createdBy
+
+                // ⚠️ CORREÇÃO: NÃO enviar status e category
+                // Deixe o Movidesk usar os valores padrão
+                // .category(ticketCategory)  <- COMENTADO
+
+                // Tags
                 .addTag("kb-governance")
                 .addTag("atualização-manual")
                 .addTag(assignment.getReason().name().toLowerCase())
-                .owner(assignment.getAgent().getId())
+
                 .build();
 
         // Cria ticket no Movidesk
@@ -108,6 +129,20 @@ public class MovideskTicketService {
     // =========================================================
     // HELPERS PRIVADOS
     // =========================================================
+
+    /**
+     * Resolve o time do agente
+     */
+    private String resolveOwnerTeam(KbAgent agent) {
+        if (agent.getTeams() != null && !agent.getTeams().isEmpty()) {
+            return agent.getTeams().iterator().next();
+        }
+
+        log.warn("⚠️ Agente {} não tem time configurado. Usando time padrão: {}",
+                agent.getUserName(), defaultTeam);
+
+        return defaultTeam;
+    }
 
     /**
      * Monta assunto do ticket

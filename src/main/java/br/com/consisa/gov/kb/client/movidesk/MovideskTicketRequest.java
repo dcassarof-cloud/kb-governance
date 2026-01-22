@@ -1,6 +1,7 @@
 package br.com.consisa.gov.kb.client.movidesk;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.ArrayList;
@@ -9,9 +10,11 @@ import java.util.List;
 /**
  * DTO para criação de ticket no Movidesk
  *
- * Documentação: https://api.movidesk.com/public/v1/tickets
+ * ⚠️ IMPORTANTE: Status e Category são OPCIONAIS
+ * Se não informados, o Movidesk usa valores padrão do processo
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
+@JsonInclude(JsonInclude.Include.NON_NULL)  // Não envia campos null
 public class MovideskTicketRequest {
 
     /**
@@ -25,7 +28,13 @@ public class MovideskTicketRequest {
     private String subject;
 
     /**
-     * Categoria do ticket
+     * ⚠️ OBRIGATÓRIO: Serviço de primeiro nível
+     */
+    @JsonProperty("serviceFirstLevel")
+    private String serviceFirstLevel;
+
+    /**
+     * Categoria (OPCIONAL - deixe null para usar padrão do processo)
      */
     private String category;
 
@@ -35,9 +44,10 @@ public class MovideskTicketRequest {
     private String urgency = "Normal";
 
     /**
-     * Status: Novo, EmAndamento, Resolvido, Fechado
+     * Status (OPCIONAL - deixe null para usar padrão do processo)
+     * Se informar, deve ser: "Novo", "EmAndamento", "Resolvido", "Fechado"
      */
-    private String status = "Novo";
+    private String status;
 
     /**
      * Relacionamento com base de conhecimento
@@ -46,7 +56,7 @@ public class MovideskTicketRequest {
     private String baseStatus;
 
     /**
-     * Justificativa
+     * Justificativa (descrição detalhada)
      */
     @JsonProperty("justification")
     private String justification;
@@ -57,17 +67,23 @@ public class MovideskTicketRequest {
     private String origin = "Manual";
 
     /**
+     * ⚠️ OBRIGATÓRIO: Time responsável
+     */
+    @JsonProperty("ownerTeam")
+    private String ownerTeam;
+
+    /**
      * Tags do ticket
      */
     private List<String> tags = new ArrayList<>();
 
     /**
-     * Clientes/solicitantes
+     * ⚠️ OBRIGATÓRIO: Clientes/solicitantes
      */
     private List<MovideskClientDto> clients = new ArrayList<>();
 
     /**
-     * Ações (mensagens) do ticket
+     * ⚠️ OBRIGATÓRIO: Ações (mensagens) do ticket
      */
     private List<MovideskActionDto> actions = new ArrayList<>();
 
@@ -75,6 +91,14 @@ public class MovideskTicketRequest {
      * Responsável pelo ticket (owner)
      */
     private MovideskOwnerDto owner;
+
+    /**
+     * ⚠️ OBRIGATÓRIO (em alguns fluxos do Movidesk): usuário/agente que está criando o ticket.
+     *
+     * Observação: isto é diferente do createdBy da Action (mensagem interna).
+     */
+    @JsonProperty("createdBy")
+    private MovideskOwnerDto createdBy;
 
     // ======================
     // Getters e Setters
@@ -94,6 +118,14 @@ public class MovideskTicketRequest {
 
     public void setSubject(String subject) {
         this.subject = subject;
+    }
+
+    public String getServiceFirstLevel() {
+        return serviceFirstLevel;
+    }
+
+    public void setServiceFirstLevel(String serviceFirstLevel) {
+        this.serviceFirstLevel = serviceFirstLevel;
     }
 
     public String getCategory() {
@@ -144,6 +176,14 @@ public class MovideskTicketRequest {
         this.origin = origin;
     }
 
+    public String getOwnerTeam() {
+        return ownerTeam;
+    }
+
+    public void setOwnerTeam(String ownerTeam) {
+        this.ownerTeam = ownerTeam;
+    }
+
     public List<String> getTags() {
         return tags;
     }
@@ -177,7 +217,7 @@ public class MovideskTicketRequest {
     }
 
     /**
-     * Builder para facilitar criação
+     * Builder para facilitar criação de tickets
      */
     public static class Builder {
         private final MovideskTicketRequest ticket = new MovideskTicketRequest();
@@ -187,6 +227,15 @@ public class MovideskTicketRequest {
             return this;
         }
 
+        public Builder serviceFirstLevel(String service) {
+            ticket.serviceFirstLevel = service;
+            return this;
+        }
+
+        /**
+         * OPCIONAL: Define categoria
+         * ⚠️ Se não chamar, o Movidesk usa o padrão do processo
+         */
         public Builder category(String category) {
             ticket.category = category;
             return this;
@@ -197,21 +246,22 @@ public class MovideskTicketRequest {
             return this;
         }
 
+        /**
+         * OPCIONAL: Define status
+         * ⚠️ Se não chamar, o Movidesk usa "Novo"
+         */
+        public Builder status(String status) {
+            ticket.status = status;
+            return this;
+        }
+
         public Builder justification(String justification) {
             ticket.justification = justification;
             return this;
         }
 
-        public Builder addTag(String tag) {
-            ticket.tags.add(tag);
-            return this;
-        }
-
-        public Builder addAction(String description) {
-            MovideskActionDto action = new MovideskActionDto();
-            action.setType(1); // Tipo 1 = Ação/Descrição
-            action.setDescription(description);
-            ticket.actions.add(action);
+        public Builder ownerTeam(String team) {
+            ticket.ownerTeam = team;
             return this;
         }
 
@@ -222,7 +272,75 @@ public class MovideskTicketRequest {
             return this;
         }
 
+        /**
+         * ⚠️ OBRIGATÓRIO (em alguns fluxos do Movidesk): define o CreatedBy do ticket.
+         * Isso representa "quem abriu o ticket" (não confundir com Action.createdBy).
+         */
+        public Builder createdBy(String id) {
+            MovideskOwnerDto cb = new MovideskOwnerDto();
+            cb.setId(id);
+            ticket.createdBy = cb;
+            return this;
+        }
+
+        public Builder addClient(String clientId) {
+            MovideskClientDto client = new MovideskClientDto();
+            client.setId(clientId);
+            ticket.clients.add(client);
+            return this;
+        }
+
+        public Builder addTag(String tag) {
+            ticket.tags.add(tag);
+            return this;
+        }
+
+        /**
+         * ⚠️ OBRIGATÓRIO: Adiciona ação ao ticket
+         *
+         * @param description texto da ação
+         * @param createdById ID do agente que criou
+         */
+        public Builder addAction(String description, String createdById) {
+            MovideskActionDto action = new MovideskActionDto();
+            action.setType(1); // Tipo 1 = Ação interna
+            action.setDescription(description);
+
+            MovideskOwnerDto createdBy = new MovideskOwnerDto();
+            createdBy.setId(createdById);
+            action.setCreatedBy(createdBy);
+
+            ticket.actions.add(action);
+            return this;
+        }
+
         public MovideskTicketRequest build() {
+            // Validações básicas
+            if (ticket.subject == null || ticket.subject.isBlank()) {
+                throw new IllegalStateException("Subject é obrigatório");
+            }
+
+            if (ticket.serviceFirstLevel == null || ticket.serviceFirstLevel.isBlank()) {
+                throw new IllegalStateException("ServiceFirstLevel é obrigatório");
+            }
+
+            // Alguns fluxos do Movidesk exigem CreatedBy no nível do ticket (além da Action).
+            if (ticket.createdBy == null || ticket.createdBy.getId() == null || ticket.createdBy.getId().isBlank()) {
+                throw new IllegalStateException("CreatedBy do ticket é obrigatório");
+            }
+
+            if (ticket.actions.isEmpty()) {
+                throw new IllegalStateException("Pelo menos 1 action é obrigatória");
+            }
+
+            if (ticket.clients.isEmpty()) {
+                throw new IllegalStateException("Pelo menos 1 client é obrigatório");
+            }
+
+            if (ticket.ownerTeam == null && ticket.owner == null) {
+                throw new IllegalStateException("OwnerTeam ou Owner é obrigatório");
+            }
+
             return ticket;
         }
     }
