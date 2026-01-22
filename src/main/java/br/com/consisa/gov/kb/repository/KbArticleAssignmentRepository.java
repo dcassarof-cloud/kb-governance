@@ -17,7 +17,7 @@ import java.util.Optional;
  */
 @Repository
 public interface KbArticleAssignmentRepository extends JpaRepository<KbArticleAssignment, Long> {
-    
+
     /**
      * Busca a atribuição ativa mais recente de um artigo
      */
@@ -29,20 +29,20 @@ public interface KbArticleAssignmentRepository extends JpaRepository<KbArticleAs
         LIMIT 1
         """)
     Optional<KbArticleAssignment> findActiveByArticleId(@Param("articleId") Long articleId);
-    
+
     /**
      * Lista atribuições de um agente por status
      */
     List<KbArticleAssignment> findByAgentAndStatusOrderByCreatedAtDesc(
-        KbAgent agent, 
-        AssignmentStatus status
+            KbAgent agent,
+            AssignmentStatus status
     );
-    
+
     /**
      * Lista todas atribuições de um agente
      */
     List<KbArticleAssignment> findByAgentOrderByCreatedAtDesc(KbAgent agent);
-    
+
     /**
      * Lista atribuições atrasadas (status ativo e prazo vencido)
      */
@@ -54,7 +54,7 @@ public interface KbArticleAssignmentRepository extends JpaRepository<KbArticleAs
         ORDER BY a.dueDate ASC
         """)
     List<KbArticleAssignment> findOverdue(@Param("now") OffsetDateTime now);
-    
+
     /**
      * Conta atribuições ativas de um agente
      */
@@ -64,14 +64,19 @@ public interface KbArticleAssignmentRepository extends JpaRepository<KbArticleAs
           AND a.status IN ('PENDING', 'IN_PROGRESS')
         """)
     long countActiveByAgent(@Param("agent") KbAgent agent);
-    
+
     /**
      * Lista atribuições por status
      */
     List<KbArticleAssignment> findByStatusOrderByCreatedAtDesc(AssignmentStatus status);
-    
+
     /**
      * Busca estatísticas agregadas
+     *
+     * ✅ CORRIGIDO: Retorna List<Object[]> ao invés de Object[]
+     *
+     * JPQL queries sempre retornam List, mesmo quando há apenas um resultado.
+     * O service deve chamar .get(0) para pegar o primeiro elemento.
      */
     @Query("""
         SELECT 
@@ -82,13 +87,13 @@ public interface KbArticleAssignmentRepository extends JpaRepository<KbArticleAs
             SUM(CASE WHEN a.status = 'CANCELLED' THEN 1 ELSE 0 END) as cancelled
         FROM KbArticleAssignment a
         """)
-    Object[] getStatistics();
-    
+    List<Object[]> getStatistics();
+
     /**
      * Lista atribuições criadas após uma data
      */
     List<KbArticleAssignment> findByCreatedAtAfterOrderByCreatedAtDesc(OffsetDateTime date);
-    
+
     /**
      * Verifica se um artigo já tem atribuição ativa
      */

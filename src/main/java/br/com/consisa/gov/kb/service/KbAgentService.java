@@ -4,6 +4,7 @@ import br.com.consisa.gov.kb.domain.KbAgent;
 import br.com.consisa.gov.kb.repository.KbAgentRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +26,8 @@ import java.util.Optional;
  * - Auto-assign de artigos
  * - Balanceamento de carga
  * - Relatórios de produtividade
+ *
+ * ✅ VERSÃO CORRIGIDA - Compatível com KbAgentRepository
  */
 @Service
 public class KbAgentService {
@@ -80,7 +83,7 @@ public class KbAgentService {
         KbAgent selected = candidates.get(0);
 
         log.info("✅ Agente selecionado: {} (especialidade={}, carga={})",
-                selected.getUserName(), systemCode, selected.getAssignedCount());
+                selected.getBusinessName(), systemCode, selected.getAssignedCount());
 
         return Optional.of(selected);
     }
@@ -95,10 +98,15 @@ public class KbAgentService {
 
     /**
      * 📊 Busca top N agentes mais produtivos
+     *
+     * ✅ CORRIGIDO: Usa PageRequest para limitar resultados
      */
     @Transactional(readOnly = true)
     public List<KbAgent> findTopProductive(int limit) {
-        return repository.findTopByProductivity(Math.min(limit, 50));
+        int safeLimit = Math.min(Math.max(limit, 1), 50);
+        PageRequest pageRequest = PageRequest.of(0, safeLimit);
+
+        return repository.findTopByProductivity(pageRequest);
     }
 
     /**
@@ -117,7 +125,8 @@ public class KbAgentService {
         repository.findById(agentId).ifPresent(agent -> {
             agent.incrementAssigned();
             repository.save(agent);
-            log.debug("📊 Agente {} agora tem {} atribuições", agent.getUserName(), agent.getAssignedCount());
+            log.debug("📊 Agente {} agora tem {} atribuições",
+                    agent.getBusinessName(), agent.getAssignedCount());
         });
     }
 
@@ -129,7 +138,8 @@ public class KbAgentService {
         repository.findById(agentId).ifPresent(agent -> {
             agent.completeAssignment();
             repository.save(agent);
-            log.debug("✅ Agente {} concluiu atribuição (total: {})", agent.getUserName(), agent.getCompletedCount());
+            log.debug("✅ Agente {} concluiu atribuição (total: {})",
+                    agent.getBusinessName(), agent.getCompletedCount());
         });
     }
 
@@ -141,7 +151,8 @@ public class KbAgentService {
         repository.findById(agentId).ifPresent(agent -> {
             agent.decrementAssigned();
             repository.save(agent);
-            log.debug("📊 Agente {} teve atribuição removida (total: {})", agent.getUserName(), agent.getAssignedCount());
+            log.debug("📊 Agente {} teve atribuição removida (total: {})",
+                    agent.getBusinessName(), agent.getAssignedCount());
         });
     }
 
