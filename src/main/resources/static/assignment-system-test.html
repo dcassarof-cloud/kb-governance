@@ -1,0 +1,1080 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Atribuições - KB Governance</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #0054C7;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-600: #4b5563;
+            --gray-900: #111827;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--gray-50);
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: linear-gradient(135deg, var(--primary) 0%, #003d8f 100%);
+            color: white;
+            padding: 32px;
+            border-radius: 16px;
+            margin-bottom: 32px;
+            box-shadow: 0 10px 30px rgba(0, 84, 199, 0.3);
+        }
+
+        .header h1 {
+            font-size: 32px;
+            font-weight: 800;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 16px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 32px;
+            border-bottom: 2px solid var(--gray-200);
+            overflow-x: auto;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--gray-600);
+            cursor: pointer;
+            transition: all 200ms;
+            white-space: nowrap;
+        }
+
+        .tab:hover {
+            color: var(--primary);
+        }
+
+        .tab.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .grid {
+            display: grid;
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .grid-2 {
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+        }
+
+        .grid-3 {
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        }
+
+        .grid-4 {
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        }
+
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border: 1px solid var(--gray-200);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid var(--gray-100);
+        }
+
+        .card-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--gray-900);
+        }
+
+        .metric-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-left: 4px solid var(--primary);
+            transition: transform 200ms;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-4px);
+        }
+
+        .metric-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--gray-600);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 8px;
+        }
+
+        .metric-value {
+            font-size: 32px;
+            font-weight: 800;
+            color: var(--gray-900);
+        }
+
+        .metric-subtitle {
+            font-size: 13px;
+            color: var(--gray-600);
+            margin-top: 4px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--gray-900);
+            margin-bottom: 8px;
+        }
+
+        .form-input,
+        .form-select,
+        .form-textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid var(--gray-200);
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 200ms;
+        }
+
+        .form-input:focus,
+        .form-select:focus,
+        .form-textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(0, 84, 199, 0.1);
+        }
+
+        .form-textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 200ms;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary) 0%, #003d8f 100%);
+            color: white;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 10px rgba(0, 0, 0, 0.15);
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .btn-outline {
+            background: white;
+            color: var(--primary);
+            border: 2px solid var(--primary);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .badge-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .badge-warning {
+            background: var(--warning);
+            color: white;
+        }
+
+        .badge-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .badge-info {
+            background: var(--primary);
+            color: white;
+        }
+
+        .badge-gray {
+            background: var(--gray-200);
+            color: var(--gray-600);
+        }
+
+        .alert {
+            padding: 16px 20px;
+            border-radius: 10px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+        }
+
+        .alert-success {
+            background: #d1fae5;
+            border-left: 4px solid var(--success);
+            color: #065f46;
+        }
+
+        .alert-warning {
+            background: #fef3c7;
+            border-left: 4px solid var(--warning);
+            color: #92400e;
+        }
+
+        .alert-danger {
+            background: #fee2e2;
+            border-left: 4px solid var(--danger);
+            color: #991b1b;
+        }
+
+        .alert-info {
+            background: #dbeafe;
+            border-left: 4px solid var(--primary);
+            color: #1e40af;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        th {
+            font-weight: 700;
+            color: var(--gray-700);
+            background: var(--gray-50);
+        }
+
+        tr:hover {
+            background: var(--gray-50);
+        }
+
+        .loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 60px 20px;
+            gap: 20px;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid var(--gray-200);
+            border-top: 4px solid var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .agent-card {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            border: 2px solid var(--gray-200);
+            cursor: pointer;
+            transition: all 200ms;
+        }
+
+        .agent-card:hover {
+            border-color: var(--primary);
+            box-shadow: 0 4px 12px rgba(0, 84, 199, 0.15);
+        }
+
+        .agent-card.selected {
+            border-color: var(--primary);
+            background: rgba(0, 84, 199, 0.05);
+        }
+
+        .agent-name {
+            font-weight: 700;
+            font-size: 16px;
+            color: var(--gray-900);
+            margin-bottom: 4px;
+        }
+
+        .agent-username {
+            font-size: 13px;
+            color: var(--gray-600);
+            margin-bottom: 8px;
+        }
+
+        .agent-teams {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+            margin-bottom: 8px;
+        }
+
+        .agent-stats {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--gray-600);
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid var(--gray-200);
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+
+        .status-pending {
+            background: var(--warning);
+        }
+
+        .status-in-progress {
+            background: var(--primary);
+        }
+
+        .status-completed {
+            background: var(--success);
+        }
+
+        .status-cancelled {
+            background: var(--gray-600);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📋 Sistema de Atribuições</h1>
+            <p>Gestão de responsáveis para atualização de manuais da KB</p>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('dashboard')">📊 Dashboard</button>
+            <button class="tab" onclick="showTab('agents')">👥 Agentes</button>
+            <button class="tab" onclick="showTab('assign')">➕ Nova Atribuição</button>
+            <button class="tab" onclick="showTab('assignments')">📋 Atribuições</button>
+            <button class="tab" onclick="showTab('auto')">🤖 Auto-Assign</button>
+        </div>
+
+        <!-- TAB: DASHBOARD -->
+        <div id="tab-dashboard" class="tab-content active">
+            <div class="grid grid-4">
+                <div class="metric-card">
+                    <div class="metric-label">Total de Agentes</div>
+                    <div class="metric-value" id="totalAgents">16</div>
+                    <div class="metric-subtitle">ativos no sistema</div>
+                </div>
+
+                <div class="metric-card" style="border-left-color: var(--warning);">
+                    <div class="metric-label">Pendentes</div>
+                    <div class="metric-value" id="totalPending">0</div>
+                    <div class="metric-subtitle">aguardando início</div>
+                </div>
+
+                <div class="metric-card" style="border-left-color: var(--primary);">
+                    <div class="metric-label">Em Andamento</div>
+                    <div class="metric-value" id="totalInProgress">0</div>
+                    <div class="metric-subtitle">sendo atualizados</div>
+                </div>
+
+                <div class="metric-card" style="border-left-color: var(--success);">
+                    <div class="metric-label">Concluídas</div>
+                    <div class="metric-value" id="totalCompleted">0</div>
+                    <div class="metric-subtitle">finalizadas</div>
+                </div>
+            </div>
+
+            <div class="grid grid-2">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">🏆 Top 5 Agentes</h3>
+                    </div>
+                    <div id="topAgentsList"></div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">⚠️ Atribuições Atrasadas</h3>
+                    </div>
+                    <div id="overdueList"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: AGENTES -->
+        <div id="tab-agents" class="tab-content">
+            <div class="card" style="margin-bottom: 24px;">
+                <div class="card-header">
+                    <h3 class="card-title">Controles</h3>
+                    <div style="display: flex; gap: 12px;">
+                        <button class="btn btn-primary" onclick="seedAgents()">
+                            📥 Importar Agentes (JSON)
+                        </button>
+                        <button class="btn btn-outline" onclick="loadAgents()">
+                            🔄 Recarregar
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-3" id="agentsList"></div>
+        </div>
+
+        <!-- TAB: NOVA ATRIBUIÇÃO -->
+        <div id="tab-assign" class="tab-content">
+            <div class="card" style="max-width: 800px; margin: 0 auto;">
+                <div class="card-header">
+                    <h3 class="card-title">➕ Nova Atribuição Manual</h3>
+                </div>
+
+                <form id="assignForm" onsubmit="createAssignment(event)">
+                    <div class="form-group">
+                        <label class="form-label">ID do Artigo</label>
+                        <input type="number" class="form-input" id="articleId" required
+                               placeholder="Ex: 12345">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Selecione o Agente</label>
+                        <select class="form-select" id="agentSelect" required>
+                            <option value="">Selecione um agente...</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Motivo</label>
+                        <select class="form-select" id="assignReason" required>
+                            <option value="QUALITY_LOW">📉 Score de Qualidade Baixo</option>
+                            <option value="CONTENT_EMPTY">📭 Conteúdo Vazio</option>
+                            <option value="CONTENT_OUTDATED">📅 Conteúdo Desatualizado</option>
+                            <option value="DUPLICATE">🔄 Duplicado Detectado</option>
+                            <option value="NO_STRUCTURE">📝 Sem Estrutura Mínima</option>
+                            <option value="MANUAL_REQUEST">✋ Solicitação Manual</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Prioridade</label>
+                        <select class="form-select" id="assignPriority" required>
+                            <option value="LOW">🟢 Baixa</option>
+                            <option value="MEDIUM" selected>🟡 Média</option>
+                            <option value="HIGH">🟠 Alta</option>
+                            <option value="URGENT">🔴 Urgente</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Prazo (Opcional)</label>
+                        <input type="date" class="form-input" id="dueDate">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Descrição Adicional (Opcional)</label>
+                        <textarea class="form-textarea" id="assignDescription"
+                                  placeholder="Informações adicionais sobre o que precisa ser atualizado..."></textarea>
+                    </div>
+
+                    <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                        <button type="button" class="btn btn-outline" onclick="showTab('assignments')">
+                            Cancelar
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            ✅ Criar Atribuição
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- TAB: ATRIBUIÇÕES -->
+        <div id="tab-assignments" class="tab-content">
+            <div class="card" style="margin-bottom: 24px;">
+                <div class="card-header">
+                    <h3 class="card-title">Filtros</h3>
+                    <div style="display: flex; gap: 12px;">
+                        <select class="form-select" id="statusFilter" onchange="loadAssignments()"
+                                style="width: auto;">
+                            <option value="">Todos os Status</option>
+                            <option value="PENDING" selected>Pendentes</option>
+                            <option value="IN_PROGRESS">Em Andamento</option>
+                            <option value="COMPLETED">Concluídas</option>
+                            <option value="CANCELLED">Canceladas</option>
+                        </select>
+                        <button class="btn btn-outline" onclick="loadAssignments()">
+                            🔄 Atualizar
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div id="assignmentsList"></div>
+            </div>
+        </div>
+
+        <!-- TAB: AUTO-ASSIGN -->
+        <div id="tab-auto" class="tab-content">
+            <div class="card" style="max-width: 800px; margin: 0 auto;">
+                <div class="card-header">
+                    <h3 class="card-title">🤖 Atribuição Automática em Lote</h3>
+                </div>
+
+                <div class="alert alert-info">
+                    <div>
+                        <strong>ℹ️ Como funciona:</strong><br>
+                        O sistema irá buscar artigos com problemas de qualidade e atribuir automaticamente
+                        aos agentes mais adequados com base em especialidade e carga de trabalho.
+                    </div>
+                </div>
+
+                <form id="autoAssignForm" onsubmit="runAutoAssign(event)">
+                    <div class="form-group">
+                        <label class="form-label">Máximo de Atribuições</label>
+                        <input type="number" class="form-input" id="maxAssignments" value="10" min="1"
+                               max="100">
+                        <small style="color: var(--gray-600);">Quantos artigos processar (1-100)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Score Mínimo de Qualidade</label>
+                        <input type="number" class="form-input" id="minQualityScore" value="50" min="0"
+                               max="100">
+                        <small style="color: var(--gray-600);">Artigos abaixo deste score serão
+                            atribuídos</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" id="includeEmpty" checked>
+                            <span>Incluir artigos com conteúdo vazio</span>
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" id="includeDuplicates" checked>
+                            <span>Incluir artigos duplicados</span>
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" id="includeNoStructure" checked>
+                            <span>Incluir artigos sem estrutura mínima</span>
+                        </label>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">
+                        🚀 Executar Atribuição Automática
+                    </button>
+                </form>
+
+                <div id="autoAssignResults" style="margin-top: 24px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==================== MOCK DATA ====================
+        const MOCK_AGENTS = [
+            {
+                id: "1363711210",
+                businessName: "Guilherme Cazella",
+                userName: "guilherme.dellani",
+                isActive: true,
+                teams: ["ERP - EMPRESARIAL"],
+                specialties: ["CONSISANET"],
+                assignedCount: 3,
+                completedCount: 15
+            },
+            {
+                id: "154231232",
+                businessName: "Daniel Cassaro Filho",
+                userName: "daniel.cassaro",
+                isActive: true,
+                teams: ["ERP - EMPRESARIAL"],
+                specialties: ["CONSISANET"],
+                assignedCount: 2,
+                completedCount: 12
+            },
+            {
+                id: "1790426902",
+                businessName: "Denis Rafael Scobar",
+                userName: "denis.scobar",
+                isActive: true,
+                teams: ["ERP - EMPRESARIAL"],
+                specialties: ["CONSISANET"],
+                assignedCount: 4,
+                completedCount: 18
+            },
+            {
+                id: "1822429852",
+                businessName: "Tania Dias Constantino",
+                userName: "tania.dias",
+                isActive: true,
+                teams: ["DEPARTAMENTO PESSOAL_equ"],
+                specialties: ["SGRH"],
+                assignedCount: 1,
+                completedCount: 8
+            },
+            {
+                id: "2021389003",
+                businessName: "Oliva Patrícia Bortolini",
+                userName: "oliva.bortolini",
+                isActive: true,
+                teams: ["FISCAL/CONTÁBIL_eq", "Team Leader"],
+                specialties: ["CONSISANET", "NOTAON"],
+                assignedCount: 5,
+                completedCount: 25
+            },
+            {
+                id: "257344081",
+                businessName: "Nelusa Pietraszek",
+                userName: "nelusa.pietraszek",
+                isActive: true,
+                teams: ["FISCAL/CONTÁBIL_eq"],
+                specialties: ["CONSISANET", "NOTAON"],
+                assignedCount: 2,
+                completedCount: 10
+            }
+        ];
+
+        let agents = [...MOCK_AGENTS];
+        let assignments = [];
+
+        // ==================== TAB NAVIGATION ====================
+        function showTab(tabName) {
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+            document.querySelector(`[onclick="showTab('${tabName}')"]`).classList.add('active');
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+
+            if (tabName === 'dashboard') loadDashboard();
+            if (tabName === 'agents') loadAgents();
+            if (tabName === 'assign') loadAgentSelect();
+            if (tabName === 'assignments') loadAssignments();
+        }
+
+        // ==================== DASHBOARD ====================
+        function loadDashboard() {
+            const pending = assignments.filter(a => a.status === 'PENDING').length;
+            const inProgress = assignments.filter(a => a.status === 'IN_PROGRESS').length;
+            const completed = assignments.filter(a => a.status === 'COMPLETED').length;
+
+            document.getElementById('totalAgents').textContent = agents.length;
+            document.getElementById('totalPending').textContent = pending;
+            document.getElementById('totalInProgress').textContent = inProgress;
+            document.getElementById('totalCompleted').textContent = completed;
+
+            renderTopAgents();
+            renderOverdue();
+        }
+
+        function renderTopAgents() {
+            const sorted = [...agents].sort((a, b) => b.completedCount - a.completedCount).slice(0, 5);
+
+            const html = sorted.length === 0
+                ? '<div class="alert alert-info">Nenhum agente com conclusões ainda.</div>'
+                : `<table>
+                    <thead>
+                        <tr>
+                            <th>Agente</th>
+                            <th>Concluídas</th>
+                            <th>Pendentes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${sorted.map(a => `
+                            <tr>
+                                <td><strong>${a.businessName}</strong></td>
+                                <td><span class="badge badge-success">${a.completedCount}</span></td>
+                                <td><span class="badge badge-warning">${a.assignedCount}</span></td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>`;
+
+            document.getElementById('topAgentsList').innerHTML = html;
+        }
+
+        function renderOverdue() {
+            const now = new Date();
+            const overdue = assignments.filter(a => {
+                if (a.status === 'COMPLETED' || !a.dueDate) return false;
+                return new Date(a.dueDate) < now;
+            });
+
+            const html = overdue.length === 0
+                ? '<div class="alert alert-success">✅ Nenhuma atribuição atrasada!</div>'
+                : `<div class="alert alert-danger">
+                        <strong>⚠️ ${overdue.length} atribuições atrasadas</strong>
+                    </div>
+                    ${overdue.map(a => {
+                    const agent = agents.find(ag => ag.id === a.agentId);
+                    return `
+                            <div style="padding: 12px; border-left: 4px solid var(--danger); background: var(--gray-50); border-radius: 8px; margin-bottom: 8px;">
+                                <div style="font-weight: 600;">Artigo #${a.articleId}</div>
+                                <div style="font-size: 13px; color: var(--gray-600);">
+                                    Responsável: ${agent ? agent.businessName : 'N/A'}<br>
+                                    Prazo: ${new Date(a.dueDate).toLocaleDateString('pt-BR')}
+                                </div>
+                            </div>
+                        `;
+                }).join('')}`;
+
+            document.getElementById('overdueList').innerHTML = html;
+        }
+
+        // ==================== AGENTS ====================
+        function seedAgents() {
+            agents = [...MOCK_AGENTS];
+            localStorage.setItem('agents', JSON.stringify(agents));
+            loadAgents();
+            alert('✅ 16 agentes importados com sucesso!');
+        }
+
+        function loadAgents() {
+            const stored = localStorage.getItem('agents');
+            if (stored) {
+                agents = JSON.parse(stored);
+            }
+
+            const html = agents.map(agent => `
+                <div class="agent-card">
+                    <div class="agent-name">${agent.businessName}</div>
+                    <div class="agent-username">@${agent.userName}</div>
+                    <div class="agent-teams">
+                        ${agent.teams.map(t => `<span class="badge badge-info">${t}</span>`).join('')}
+                    </div>
+                    ${agent.specialties ? `
+                        <div class="agent-teams" style="margin-top: 4px;">
+                            ${agent.specialties.map(s => `<span class="badge badge-gray">${s}</span>`).join('')}
+                        </div>
+                    ` : ''}
+                    <div class="agent-stats">
+                        <span>✅ ${agent.completedCount} concluídas</span>
+                        <span>⏳ ${agent.assignedCount} pendentes</span>
+                    </div>
+                </div>
+            `).join('');
+
+            document.getElementById('agentsList').innerHTML = html;
+        }
+
+        function loadAgentSelect() {
+            const select = document.getElementById('agentSelect');
+            select.innerHTML = '<option value="">Selecione um agente...</option>' +
+                agents.map(a => `
+                    <option value="${a.id}">
+                        ${a.businessName} (${a.assignedCount} pendentes)
+                    </option>
+                `).join('');
+        }
+
+        // ==================== CREATE ASSIGNMENT ====================
+        function createAssignment(event) {
+            event.preventDefault();
+
+            const assignment = {
+                id: Date.now(),
+                articleId: document.getElementById('articleId').value,
+                agentId: document.getElementById('agentSelect').value,
+                reason: document.getElementById('assignReason').value,
+                priority: document.getElementById('assignPriority').value,
+                dueDate: document.getElementById('dueDate').value || null,
+                description: document.getElementById('assignDescription').value,
+                status: 'PENDING',
+                ticketId: 'TASK-' + Math.floor(Math.random() * 10000),
+                createdAt: new Date().toISOString()
+            };
+
+            // Atualiza contador do agente
+            const agent = agents.find(a => a.id === assignment.agentId);
+            if (agent) {
+                agent.assignedCount++;
+            }
+
+            assignments.push(assignment);
+            localStorage.setItem('assignments', JSON.stringify(assignments));
+            localStorage.setItem('agents', JSON.stringify(agents));
+
+            alert(`✅ Atribuição criada com sucesso!\n\n` +
+                `📋 Ticket: ${assignment.ticketId}\n` +
+                `👤 Responsável: ${agent ? agent.businessName : 'N/A'}\n` +
+                `📄 Artigo: ${assignment.articleId}`);
+
+            document.getElementById('assignForm').reset();
+            showTab('assignments');
+        }
+
+        // ==================== ASSIGNMENTS ====================
+        function loadAssignments() {
+            const stored = localStorage.getItem('assignments');
+            if (stored) {
+                assignments = JSON.parse(stored);
+            }
+
+            const statusFilter = document.getElementById('statusFilter').value;
+            const filtered = statusFilter
+                ? assignments.filter(a => a.status === statusFilter)
+                : assignments;
+
+            if (filtered.length === 0) {
+                document.getElementById('assignmentsList').innerHTML =
+                    '<div class="alert alert-info">Nenhuma atribuição encontrada.</div>';
+                return;
+            }
+
+            const html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Ticket</th>
+                            <th>Artigo</th>
+                            <th>Responsável</th>
+                            <th>Motivo</th>
+                            <th>Prioridade</th>
+                            <th>Status</th>
+                            <th>Criado</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${filtered.map(a => {
+                const agent = agents.find(ag => ag.id === a.agentId);
+                return `
+                                <tr>
+                                    <td><strong>${a.ticketId}</strong></td>
+                                    <td>#${a.articleId}</td>
+                                    <td>${agent ? agent.businessName : 'N/A'}</td>
+                                    <td><span class="badge badge-gray">${formatReason(a.reason)}</span></td>
+                                    <td><span class="badge badge-${getPriorityBadge(a.priority)}">${a.priority}</span></td>
+                                    <td>
+                                        <span class="status-indicator status-${a.status.toLowerCase().replace('_', '-')}"></span>
+                                        ${a.status}
+                                    </td>
+                                    <td>${new Date(a.createdAt).toLocaleDateString('pt-BR')}</td>
+                                    <td>
+                                        ${a.status === 'PENDING' ? `
+                                            <button class="btn btn-success" style="font-size: 11px; padding: 4px 8px;" onclick="completeAssignment(${a.id})">
+                                                ✓ Concluir
+                                            </button>
+                                        ` : '-'}
+                                    </td>
+                                </tr>
+                            `;
+            }).join('')}
+                    </tbody>
+                </table>
+            `;
+
+            document.getElementById('assignmentsList').innerHTML = html;
+        }
+
+        function completeAssignment(id) {
+            const assignment = assignments.find(a => a.id === id);
+            if (!assignment) return;
+
+            assignment.status = 'COMPLETED';
+            assignment.completedAt = new Date().toISOString();
+
+            // Atualiza contadores do agente
+            const agent = agents.find(a => a.id === assignment.agentId);
+            if (agent) {
+                agent.assignedCount = Math.max(0, agent.assignedCount - 1);
+                agent.completedCount++;
+            }
+
+            localStorage.setItem('assignments', JSON.stringify(assignments));
+            localStorage.setItem('agents', JSON.stringify(agents));
+
+            alert('✅ Atribuição marcada como concluída!');
+            loadAssignments();
+            loadDashboard();
+        }
+
+        // ==================== AUTO-ASSIGN ====================
+        function runAutoAssign(event) {
+            event.preventDefault();
+
+            const maxAssignments = parseInt(document.getElementById('maxAssignments').value);
+            const minQualityScore = parseInt(document.getElementById('minQualityScore').value);
+
+            // Simula processamento
+            const newAssignments = [];
+            const mockArticles = [12345, 12346, 12347, 12348, 12349, 12350, 12351, 12352];
+
+            for (let i = 0; i < Math.min(maxAssignments, mockArticles.length); i++) {
+                // Seleciona agente com menor carga
+                const leastBusy = [...agents].sort((a, b) => a.assignedCount - b.assignedCount)[0];
+
+                const assignment = {
+                    id: Date.now() + i,
+                    articleId: mockArticles[i],
+                    agentId: leastBusy.id,
+                    reason: 'QUALITY_LOW',
+                    priority: 'MEDIUM',
+                    status: 'PENDING',
+                    ticketId: 'TASK-' + Math.floor(Math.random() * 10000),
+                    createdAt: new Date().toISOString()
+                };
+
+                leastBusy.assignedCount++;
+                newAssignments.push(assignment);
+                assignments.push(assignment);
+            }
+
+            localStorage.setItem('assignments', JSON.stringify(assignments));
+            localStorage.setItem('agents', JSON.stringify(agents));
+
+            document.getElementById('autoAssignResults').innerHTML = `
+                <div class="alert alert-success">
+                    <div>
+                        <strong>✅ Processamento Concluído!</strong><br><br>
+                        📊 Artigos processados: ${mockArticles.length}<br>
+                        ✅ Atribuições criadas: ${newAssignments.length}<br><br>
+                        <button class="btn btn-primary" onclick="showTab('assignments')">
+                            Ver Atribuições
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            loadDashboard();
+        }
+
+        // ==================== HELPERS ====================
+        function formatReason(reason) {
+            const map = {
+                'QUALITY_LOW': 'Score Baixo',
+                'CONTENT_EMPTY': 'Vazio',
+                'CONTENT_OUTDATED': 'Desatualizado',
+                'DUPLICATE': 'Duplicado',
+                'NO_STRUCTURE': 'Sem Estrutura',
+                'MANUAL_REQUEST': 'Manual'
+            };
+            return map[reason] || reason;
+        }
+
+        function getPriorityBadge(priority) {
+            const map = {
+                'LOW': 'gray',
+                'MEDIUM': 'info',
+                'HIGH': 'warning',
+                'URGENT': 'danger'
+            };
+            return map[priority] || 'gray';
+        }
+
+        // ==================== INIT ====================
+        document.addEventListener('DOMContentLoaded', () => {
+            // Carrega dados do localStorage
+            const storedAgents = localStorage.getItem('agents');
+            const storedAssignments = localStorage.getItem('assignments');
+
+            if (storedAgents) agents = JSON.parse(storedAgents);
+            if (storedAssignments) assignments = JSON.parse(storedAssignments);
+
+            loadDashboard();
+        });
+    </script>
+</body>
+</html>
