@@ -17,15 +17,10 @@ import org.springframework.web.client.RestClientResponseException;
  * Papel na arquitetura:
  * Controller -> Service -> MovideskClient -> API Movidesk
  *
- * Importante:
- * - NÃO contém regra de negócio
- * - NÃO conhece banco
- * - NÃO decide governança
- *
- * Apenas:
- * - chama API
- * - lança exceções
- * - loga com segurança
+ * Funcionalidades:
+ * - Buscar artigos da KB
+ * - Criar tickets (tarefas)
+ * - Buscar informações de agentes
  */
 @Component
 public class MovideskClient {
@@ -100,6 +95,44 @@ public class MovideskClient {
         } catch (ResourceAccessException ex) {
             log.error("Erro de rede Movidesk searchArticles page={} msg={}",
                     page, safeMsg(ex));
+            throw ex;
+        }
+    }
+
+    /**
+     * Cria um ticket no Movidesk.
+     *
+     * @param request dados do ticket
+     * @return resposta com ID e protocolo do ticket criado
+     */
+    public MovideskTicketResponse createTicket(MovideskTicketRequest request) {
+        try {
+            log.info("Movidesk: criando ticket subject='{}'", request.getSubject());
+
+            MovideskTicketResponse response = restClient.post()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/tickets")
+                            .queryParam("token", token)
+                            .build())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .accept(MediaType.APPLICATION_JSON)
+                    .body(request)
+                    .retrieve()
+                    .body(MovideskTicketResponse.class);
+
+            log.info("✅ Ticket criado: id={} protocol={}",
+                    response.getId(), response.getProtocol());
+
+            return response;
+
+        } catch (HttpClientErrorException | HttpServerErrorException ex) {
+            log.error("❌ Erro Movidesk createTicket status={} body={}",
+                    ex.getStatusCode(), safeBody(ex));
+            throw ex;
+
+        } catch (ResourceAccessException ex) {
+            log.error("❌ Erro de rede Movidesk createTicket msg={}",
+                    safeMsg(ex));
             throw ex;
         }
     }
