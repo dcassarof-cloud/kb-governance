@@ -6,26 +6,21 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * Dashboard API - Resumo de governança
- *
- * Rotas:
- *  GET /api/v1/dashboard/summary
- *
- * Observação:
- * - O front já está chamando exatamente essa rota.
+ * Dashboard API
+ * GET /api/v1/dashboard/summary
  */
 @RestController
 @RequestMapping("/api/v1/dashboard")
 public class DashboardController {
 
-    private final DashboardService dashboardService;
+    private final DashboardService service;
 
-    public DashboardController(DashboardService dashboardService) {
-        this.dashboardService = dashboardService;
+    public DashboardController(DashboardService service) {
+        this.service = service;
     }
 
     @GetMapping("/summary")
     public ResponseEntity<DashboardSummaryDto> summary() {
-        return ResponseEntity.ok(dashboardService.getSummary());
+        return ResponseEntity.ok(service.getSummary());
     }
 }

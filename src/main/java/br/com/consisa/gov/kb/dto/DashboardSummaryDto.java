@@ -3,8 +3,10 @@ package br.com.consisa.gov.kb.dto;
 import java.util.List;
 
 /**
- * DTO do resumo do dashboard.
- * Mantém o contrato simples e estável para o front.
+ * Resumo do Dashboard (contrato estável para o front).
+ *
+ * Dica Consisa 2026:
+ * - Prefira DTOs enxutos para UI (não exponha Entity direto).
  */
 public record DashboardSummaryDto(
         long totalArticles,

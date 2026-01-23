@@ -5,20 +5,14 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 
-/**
- * Serviço do Dashboard.
- *
- * Comece simples (stub) e depois conecte ao banco:
- * - contar artigos
- * - contar issues
- * - contar duplicados
- * - agrupamentos por sistema/status
- */
 @Service
 public class DashboardService {
 
     public DashboardSummaryDto getSummary() {
-        // TODO: Buscar dados reais do Postgres (repositories)
+        // TODO (fase 2): trocar por queries reais:
+        // - total articles (kb_article)
+        // - issues (kb_governance_issue)
+        // - duplicates (group by content_hash)
         return new DashboardSummaryDto(
                 0,
                 0,
