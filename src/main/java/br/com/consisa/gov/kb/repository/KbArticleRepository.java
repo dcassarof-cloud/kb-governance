@@ -233,4 +233,61 @@ public interface KbArticleRepository extends JpaRepository<KbArticle, Long> {
         order by a.updatedDate desc
     """)
     List<Long> findArticlesForRetry(Pageable pageable);
+
+
+    @Query("select count(a) from KbArticle a where a.articleStatus = 1")
+    long countActiveArticles();
+
+    @Query("select count(a) from KbArticle a where a.articleStatus = 1 and a.governanceStatus = :status")
+    long countActiveByGovernanceStatus(@Param("status") String status);
+
+    /**
+     * Contagem por sistema (inclui não classificados).
+     * Retorna linhas: system_code, system_name, count
+     */
+    @Query(value = """
+        SELECT
+          COALESCE(s.code, 'UNCLASSIFIED') AS system_code,
+          COALESCE(s.name, 'Não classificado') AS system_name,
+          COUNT(*) AS cnt
+        FROM kb_article a
+        LEFT JOIN kb_system s ON s.id = a.system_id
+        WHERE a.article_status = 1
+        GROUP BY COALESCE(s.code, 'UNCLASSIFIED'), COALESCE(s.name, 'Não classificado')
+        ORDER BY cnt DESC
+        """, nativeQuery = true)
+    List<Object[]> countActiveBySystem();
+
+    /**
+     * Contagem por governance_status (PENDING/APPROVED/REJECTED)
+     * Retorna linhas: status, count
+     */
+    @Query(value = """
+        SELECT a.governance_status AS status, COUNT(*) AS cnt
+        FROM kb_article a
+        WHERE a.article_status = 1
+        GROUP BY a.governance_status
+        ORDER BY cnt DESC
+        """, nativeQuery = true)
+    List<Object[]> countActiveByGovernanceStatus();
+
+    /**
+     * Grupos de duplicados (por hash)
+     * Retorna: content_hash, count, array_agg(ids)
+     */
+    @Query(value = """
+        SELECT
+          a.content_hash AS hash,
+          COUNT(*) AS cnt,
+          ARRAY_AGG(a.id ORDER BY a.updated_date DESC NULLS LAST) AS ids
+        FROM kb_article a
+        WHERE a.article_status = 1
+          AND a.content_hash IS NOT NULL
+          AND a.content_hash <> ''
+        GROUP BY a.content_hash
+        HAVING COUNT(*) > 1
+        ORDER BY cnt DESC
+        """, nativeQuery = true)
+    List<Object[]> findDuplicateGroups();
+
 }

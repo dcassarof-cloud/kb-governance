@@ -2,7 +2,7 @@ package br.com.consisa.gov.kb.repository;
 
 import br.com.consisa.gov.kb.domain.KbSystem;
 import org.springframework.data.jpa.repository.JpaRepository;
-
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -25,4 +25,6 @@ public interface KbSystemRepository extends JpaRepository<KbSystem, Long> {
      * e forçar tratamento no Service.
      */
     Optional<KbSystem> findByCode(String code);
+    List<KbSystem> findByIsActiveTrueOrderByNameAsc();
+
 }
