@@ -62,10 +62,15 @@ public class GovernanceApiController {
     /**
      * GET /api/v1/governance/issues?page=1&size=10&type=...&severity=...&status=...
      *
-     * IMPORTANTE: page é 1-based (converte para 0-based internamente)
+     * 📋 LISTA PAGINADA DE ISSUES DE GOVERNANÇA
+     *
+     * REGRAS:
+     * - page é 1-based (converte para 0-based internamente)
+     * - Retorna issues com dados do artigo e sistema enriquecidos
+     * - Robustez: nunca retorna 500, retorna lista vazia em caso de erro
      */
     @GetMapping("/issues")
-    @Transactional(readOnly = true)  // ✅ FIX: Evita LazyInitializationException
+    @Transactional(readOnly = true)
     public ResponseEntity<PaginatedResponse<GovernanceIssueResponse>> getIssues(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size,
@@ -74,22 +79,22 @@ public class GovernanceApiController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String systemCode
     ) {
-        log.info("GET /api/v1/governance/issues?page={}&size={}", page, size);
+        log.info("GET /api/v1/governance/issues?page={}&size={}&type={}&status={}", page, size, type, status);
 
         try {
             // Converte page de 1-based para 0-based
             int pageIndex = Math.max(0, page - 1);
             int safeSize = Math.max(1, Math.min(size, 100));
 
-            // Busca issues (simplificado - sem filtros ainda)
-            var pageable = PageRequest.of(pageIndex, safeSize, Sort.by(Sort.Direction.DESC, "createdAt"));
-            var pageResult = issueRepo.findAll(pageable);
+            // Busca issues usando a query nativa enriquecida (com artigo e sistema)
+            var pageable = PageRequest.of(pageIndex, safeSize);
+            var pageResult = issueRepo.pageIssues(pageable);
 
             log.info("📊 Total de issues no banco: {}", pageResult.getTotalElements());
 
-            // Mapeia para DTO
+            // Mapeia para DTO com tratamento robusto
             List<GovernanceIssueResponse> items = pageResult.getContent().stream()
-                    .map(this::mapIssueToDto)
+                    .map(this::mapIssueRowToDto)
                     .collect(Collectors.toList());
 
             PaginatedResponse<GovernanceIssueResponse> response = new PaginatedResponse<>(
@@ -107,7 +112,8 @@ public class GovernanceApiController {
 
         } catch (Exception e) {
             log.error("❌ Erro ao buscar issues: {}", e.getMessage(), e);
-            return ResponseEntity.internalServerError().build();
+            // Retorna lista vazia em vez de 500 (robustez)
+            return ResponseEntity.ok(new PaginatedResponse<>(page, size, 0L, 0, List.of()));
         }
     }
 
@@ -115,23 +121,31 @@ public class GovernanceApiController {
      * GET /api/v1/governance/duplicates
      *
      * Retorna grupos de artigos duplicados (mesmo content_hash).
+     *
+     * ROBUSTEZ: Nunca retorna 500, retorna lista vazia em caso de erro.
      */
     @GetMapping("/duplicates")
-    @Transactional(readOnly = true)  // ✅ FIX: Evita LazyInitializationException
+    @Transactional(readOnly = true)
     public ResponseEntity<List<DuplicateGroupResponse>> getDuplicates() {
         log.info("GET /api/v1/governance/duplicates");
 
         try {
-            // 1. Busca hashes duplicados
+            // 1. Busca hashes duplicados (com proteção contra null)
             List<String> duplicateHashes = articleRepo.findDuplicateContentHashes();
+            if (duplicateHashes == null || duplicateHashes.isEmpty()) {
+                log.info("✅ Nenhum grupo de duplicados encontrado");
+                return ResponseEntity.ok(List.of());
+            }
 
             // 2. Para cada hash, busca os artigos
             List<DuplicateGroupResponse> groups = new ArrayList<>();
 
             for (String hash : duplicateHashes) {
+                if (hash == null || hash.isBlank()) continue;
+
                 List<Long> articleIds = articleRepo.findArticleIdsByContentHash(hash);
 
-                if (articleIds.size() > 1) {
+                if (articleIds != null && articleIds.size() > 1) {
                     groups.add(new DuplicateGroupResponse(
                             hash,
                             articleIds.size(),
@@ -146,7 +160,8 @@ public class GovernanceApiController {
 
         } catch (Exception e) {
             log.error("❌ Erro ao buscar duplicados: {}", e.getMessage(), e);
-            return ResponseEntity.internalServerError().build();
+            // Retorna lista vazia em vez de 500 (robustez)
+            return ResponseEntity.ok(List.of());
         }
     }
 
@@ -154,6 +169,29 @@ public class GovernanceApiController {
     // MAPPING
     // ======================
 
+    /**
+     * Mapeia resultado da query nativa IssueRow para DTO.
+     * Já vem com artigo e sistema enriquecidos do JOIN.
+     */
+    private GovernanceIssueResponse mapIssueRowToDto(KbGovernanceIssueRepository.IssueRow row) {
+        return new GovernanceIssueResponse(
+                row.getId(),
+                row.getIssueType() != null ? row.getIssueType() : "UNKNOWN",
+                row.getSeverity() != null ? row.getSeverity() : "WARN",
+                row.getStatus() != null ? row.getStatus() : "OPEN",
+                row.getArticleId(),
+                row.getArticleTitle(),
+                row.getSystemCode(),
+                row.getSystemName(),
+                row.getMessage(),
+                row.getCreatedAt() != null ? row.getCreatedAt() : java.time.OffsetDateTime.now()
+        );
+    }
+
+    /**
+     * Mapeia entidade KbGovernanceIssue para DTO (fallback).
+     * Usado quando a query nativa não está disponível.
+     */
     private GovernanceIssueResponse mapIssueToDto(KbGovernanceIssue issue) {
         // Busca dados do artigo
         KbArticle article = articleRepo.findById(issue.getArticleId()).orElse(null);

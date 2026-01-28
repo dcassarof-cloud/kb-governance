@@ -51,39 +51,55 @@ public class DashboardApiController {
      * - Distribuição por sistema
      * - Distribuição por status
      */
+    /**
+     * GET /api/v1/dashboard/summary
+     *
+     * 📊 REGRAS DE NEGÓCIO (Sprint 1):
+     * - "Issues" = total de issues abertas (status = OPEN)
+     * - "OK" = total de artigos ATIVOS − artigos DISTINTOS com issue aberta
+     * - "Duplicados" = quantidade de grupos de hashes duplicados
+     */
     @GetMapping("/summary")
     public ResponseEntity<DashboardSummaryResponse> getSummary() {
         log.info("GET /api/v1/dashboard/summary");
 
         try {
-            // 1. Total de artigos ativos
-            long totalArticles = articleRepo.count();
+            // 1. Total de artigos ativos (article_status = 1)
+            long totalArticles = articleRepo.countActiveArticles();
 
-            // 2. Issues abertas
-            long issuesCount = issueRepo.count();
+            // 2. Issues abertas (status = OPEN)
+            // REGRA: "Issues" = issues abertas (OPEN)
+            long issuesCount = issueRepo.countOpenIssues();
 
-            // 3. Artigos OK (estimativa: total - artigos com issues)
-            // Simplificação: artigos que não têm issues = OK
-            long okCount = Math.max(0, totalArticles - issuesCount);
+            // 3. Artigos OK
+            // REGRA: "OK" = total de artigos − artigos DISTINTOS com issue aberta
+            long articlesWithIssues = issueRepo.countDistinctArticlesWithOpenIssues();
+            long okCount = Math.max(0, totalArticles - articlesWithIssues);
 
-            // 4. Duplicados (hashes duplicados)
+            // 4. Duplicados (quantidade de grupos de hashes duplicados)
             List<String> duplicateHashes = articleRepo.findDuplicateContentHashes();
-            long duplicatesCount = duplicateHashes.size();
+            long duplicatesCount = duplicateHashes != null ? duplicateHashes.size() : 0L;
 
-            // 5. Por sistema (usando query nativa)
-            List<Object[]> systemStats = articleRepo.countBySystemAndSyncStatus();
-            List<DashboardSummaryResponse.BySystem> bySystem = systemStats.stream()
-                    .map(row -> new DashboardSummaryResponse.BySystem(
-                            (String) row[0],  // system_code
-                            "",  // system_name (não temos na query)
-                            ((Number) row[2]).longValue()  // count
-                    ))
-                    .collect(Collectors.toList());
+            // 5. Por sistema (usando query nativa com tratamento robusto)
+            List<DashboardSummaryResponse.BySystem> bySystem;
+            try {
+                List<Object[]> systemStats = articleRepo.countActiveBySystem();
+                bySystem = systemStats.stream()
+                        .map(row -> new DashboardSummaryResponse.BySystem(
+                                row[0] != null ? String.valueOf(row[0]) : "UNCLASSIFIED",
+                                row[1] != null ? String.valueOf(row[1]) : "Não classificado",
+                                row[2] != null ? ((Number) row[2]).longValue() : 0L
+                        ))
+                        .collect(Collectors.toList());
+            } catch (Exception e) {
+                log.warn("⚠️ Erro ao buscar stats por sistema: {}", e.getMessage());
+                bySystem = List.of();
+            }
 
-            // 6. Por status (simplificado)
+            // 6. Por status (baseado em issues abertas)
             List<DashboardSummaryResponse.ByStatus> byStatus = List.of(
                     new DashboardSummaryResponse.ByStatus("OK", okCount),
-                    new DashboardSummaryResponse.ByStatus("WITH_ISSUES", issuesCount)
+                    new DashboardSummaryResponse.ByStatus("WITH_ISSUES", articlesWithIssues)
             );
 
             DashboardSummaryResponse response = new DashboardSummaryResponse(
@@ -95,14 +111,17 @@ public class DashboardApiController {
                     byStatus
             );
 
-            log.info("✅ Dashboard summary: {} total, {} OK, {} issues", 
-                    totalArticles, okCount, issuesCount);
+            log.info("✅ Dashboard: total={} OK={} issues={} duplicates={}",
+                    totalArticles, okCount, issuesCount, duplicatesCount);
 
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {
             log.error("❌ Erro ao gerar dashboard summary: {}", e.getMessage(), e);
-            return ResponseEntity.internalServerError().build();
+            // Retorna resposta vazia em vez de 500
+            return ResponseEntity.ok(new DashboardSummaryResponse(
+                    0L, 0L, 0L, 0L, List.of(), List.of()
+            ));
         }
     }
 }

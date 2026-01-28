@@ -23,6 +23,24 @@ public interface KbGovernanceIssueRepository extends JpaRepository<KbGovernanceI
     long countByStatusAndIssueType(GovernanceIssueStatus status, KbGovernanceIssueType issueType);
 
     /**
+     * 📊 Conta artigos DISTINTOS com issues abertas.
+     * Usado para calcular: OK = totalArtigos - artigosComIssueAberta
+     *
+     * REGRA DE NEGÓCIO:
+     * - "Issues abertas" = status OPEN
+     * - Um artigo com múltiplas issues abertas conta só uma vez
+     */
+    @Query("SELECT COUNT(DISTINCT i.articleId) FROM KbGovernanceIssue i WHERE i.status = br.com.consisa.gov.kb.domain.GovernanceIssueStatus.OPEN")
+    long countDistinctArticlesWithOpenIssues();
+
+    /**
+     * 📊 Conta total de issues abertas (status = OPEN).
+     * Regra de negócio: Issues = OPEN
+     */
+    @Query("SELECT COUNT(i) FROM KbGovernanceIssue i WHERE i.status = br.com.consisa.gov.kb.domain.GovernanceIssueStatus.OPEN")
+    long countOpenIssues();
+
+    /**
      * Página de issues já “enriquecida” com artigo e sistema (pro front).
      */
     interface IssueRow {

@@ -1,11 +1,13 @@
 package br.com.consisa.gov.kb.service;
 
 import br.com.consisa.gov.kb.domain.*;
+import br.com.consisa.gov.kb.governance.KbGovernanceDetectorService;
 import br.com.consisa.gov.kb.repository.KbArticleRepository;
 import br.com.consisa.gov.kb.repository.KbSyncConfigRepository;
 import br.com.consisa.gov.kb.repository.KbSyncRunRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -54,6 +56,7 @@ public class KbSyncOrchestratorService {
     private final KbArticleSyncService articleSyncService;
     private final KbFullSyncService fullSyncService;
     private final KbDeltaSyncService deltaSyncService;
+    private final KbGovernanceDetectorService governanceDetector;
 
     public KbSyncOrchestratorService(
             KbSyncConfigRepository configRepo,
@@ -61,7 +64,8 @@ public class KbSyncOrchestratorService {
             KbArticleRepository articleRepo,
             KbArticleSyncService articleSyncService,
             KbFullSyncService fullSyncService,
-            KbDeltaSyncService deltaSyncService
+            KbDeltaSyncService deltaSyncService,
+            KbGovernanceDetectorService governanceDetector
     ) {
         this.configRepo = configRepo;
         this.runRepo = runRepo;
@@ -69,6 +73,7 @@ public class KbSyncOrchestratorService {
         this.articleSyncService = articleSyncService;
         this.fullSyncService = fullSyncService;
         this.deltaSyncService = deltaSyncService;
+        this.governanceDetector = governanceDetector;
     }
 
     // ======================
@@ -171,6 +176,10 @@ public class KbSyncOrchestratorService {
             log.info("✅ Sync concluído. synced={} updated={} errors={} duration={}ms",
                     counts.synced, counts.updated, counts.errors, run.getDurationMs());
 
+            // 🔍 IMPORTANTE: Após sync, dispara detectores de governança automaticamente
+            // Isso garante que issues sejam criadas/atualizadas após cada sync
+            runGovernanceDetectors();
+
             return runRepo.save(run);
 
         } catch (Exception e) {
@@ -259,6 +268,40 @@ public class KbSyncOrchestratorService {
         log.info("🗑️ Artigos marcados como MISSING: {}", marked);
 
         return c;
+    }
+
+    /**
+     * 🔍 DISPARO AUTOMÁTICO DE DETECTORES PÓS-SYNC
+     *
+     * REGRA DE NEGÓCIO (Sprint 1):
+     * - Após finalizar o SYNC, disparar automaticamente:
+     *   1. Detector de conteúdo incompleto (por artigo)
+     *   2. Detector de duplicados (global)
+     *
+     * IDEMPOTÊNCIA:
+     * - KbGovernanceIssueService.open() garante que não cria issue duplicada
+     *   (busca issue OPEN existente do mesmo tipo para o mesmo artigo)
+     */
+    private void runGovernanceDetectors() {
+        log.info("🔍 Iniciando detectores de governança pós-sync...");
+
+        try {
+            // 1. Detector de conteúdo incompleto - analisa artigos recentes
+            // Analisa os últimos 200 artigos (ajustar conforme necessidade)
+            int analyzedArticles = governanceDetector.analyzeRecent(200);
+            log.info("✅ Detector INCOMPLETE_CONTENT: {} artigos analisados", analyzedArticles);
+
+            // 2. Detector de duplicados - analisa todos os hashes duplicados
+            // IMPORTANTE: Duplicados agora geram kb_governance_issue
+            int duplicateIssues = governanceDetector.analyzeAllDuplicates();
+            log.info("✅ Detector DUPLICATE_CONTENT: {} issues abertas/atualizadas", duplicateIssues);
+
+            log.info("🔍 Detectores de governança finalizados.");
+
+        } catch (Exception e) {
+            // Não quebra o sync se os detectores falharem
+            log.error("⚠️ Erro ao executar detectores de governança: {}", e.getMessage(), e);
+        }
     }
 
     // ======================
