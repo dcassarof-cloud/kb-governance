@@ -23,21 +23,31 @@ public interface KbGovernanceIssueRepository extends JpaRepository<KbGovernanceI
     long countByStatusAndIssueType(GovernanceIssueStatus status, KbGovernanceIssueType issueType);
 
     /**
-     * 📊 Conta artigos DISTINTOS com issues abertas.
+     * 📊 Conta artigos DISTINTOS com issues abertas (OPEN ou IN_PROGRESS).
      * Usado para calcular: OK = totalArtigos - artigosComIssueAberta
      *
-     * REGRA DE NEGÓCIO:
-     * - "Issues abertas" = status OPEN
+     * REGRA DE NEGÓCIO (Sprint 1):
+     * - "Issue aberta" = status OPEN ou IN_PROGRESS
+     * - Quando analista assume issue (IN_PROGRESS), continua sendo problema aberto
      * - Um artigo com múltiplas issues abertas conta só uma vez
+     * - Só deixa de contar quando TODAS as issues do artigo são RESOLVED
      */
-    @Query("SELECT COUNT(DISTINCT i.articleId) FROM KbGovernanceIssue i WHERE i.status = br.com.consisa.gov.kb.domain.GovernanceIssueStatus.OPEN")
+    @Query("SELECT COUNT(DISTINCT i.articleId) FROM KbGovernanceIssue i " +
+           "WHERE i.status IN (br.com.consisa.gov.kb.domain.GovernanceIssueStatus.OPEN, " +
+           "br.com.consisa.gov.kb.domain.GovernanceIssueStatus.IN_PROGRESS)")
     long countDistinctArticlesWithOpenIssues();
 
     /**
-     * 📊 Conta total de issues abertas (status = OPEN).
-     * Regra de negócio: Issues = OPEN
+     * 📊 Conta total de issues abertas (OPEN ou IN_PROGRESS).
+     *
+     * REGRA DE NEGÓCIO (Sprint 1):
+     * - "Issue aberta" = OPEN ou IN_PROGRESS
+     * - Issue em tratamento (IN_PROGRESS) ainda é problema aberto
+     * - Só fecha quando status = RESOLVED
      */
-    @Query("SELECT COUNT(i) FROM KbGovernanceIssue i WHERE i.status = br.com.consisa.gov.kb.domain.GovernanceIssueStatus.OPEN")
+    @Query("SELECT COUNT(i) FROM KbGovernanceIssue i " +
+           "WHERE i.status IN (br.com.consisa.gov.kb.domain.GovernanceIssueStatus.OPEN, " +
+           "br.com.consisa.gov.kb.domain.GovernanceIssueStatus.IN_PROGRESS)")
     long countOpenIssues();
 
     /**

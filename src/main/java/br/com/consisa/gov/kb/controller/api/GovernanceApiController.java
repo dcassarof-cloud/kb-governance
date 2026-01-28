@@ -67,7 +67,8 @@ public class GovernanceApiController {
      * REGRAS:
      * - page é 1-based (converte para 0-based internamente)
      * - Retorna issues com dados do artigo e sistema enriquecidos
-     * - Robustez: nunca retorna 500, retorna lista vazia em caso de erro
+     * - Sem dados = lista vazia (não é erro)
+     * - Erro real = HTTP 500 (tratado pelo GlobalExceptionHandler)
      */
     @GetMapping("/issues")
     @Transactional(readOnly = true)
@@ -81,40 +82,33 @@ public class GovernanceApiController {
     ) {
         log.info("GET /api/v1/governance/issues?page={}&size={}&type={}&status={}", page, size, type, status);
 
-        try {
-            // Converte page de 1-based para 0-based
-            int pageIndex = Math.max(0, page - 1);
-            int safeSize = Math.max(1, Math.min(size, 100));
+        // Converte page de 1-based para 0-based
+        int pageIndex = Math.max(0, page - 1);
+        int safeSize = Math.max(1, Math.min(size, 100));
 
-            // Busca issues usando a query nativa enriquecida (com artigo e sistema)
-            var pageable = PageRequest.of(pageIndex, safeSize);
-            var pageResult = issueRepo.pageIssues(pageable);
+        // Busca issues usando a query nativa enriquecida (com artigo e sistema)
+        var pageable = PageRequest.of(pageIndex, safeSize);
+        var pageResult = issueRepo.pageIssues(pageable);
 
-            log.info("📊 Total de issues no banco: {}", pageResult.getTotalElements());
+        log.info("📊 Total de issues no banco: {}", pageResult.getTotalElements());
 
-            // Mapeia para DTO com tratamento robusto
-            List<GovernanceIssueResponse> items = pageResult.getContent().stream()
-                    .map(this::mapIssueRowToDto)
-                    .collect(Collectors.toList());
+        // Mapeia para DTO com tratamento robusto
+        List<GovernanceIssueResponse> items = pageResult.getContent().stream()
+                .map(this::mapIssueRowToDto)
+                .collect(Collectors.toList());
 
-            PaginatedResponse<GovernanceIssueResponse> response = new PaginatedResponse<>(
-                    page,  // retorna page original (1-based)
-                    safeSize,
-                    pageResult.getTotalElements(),
-                    pageResult.getTotalPages(),
-                    items
-            );
+        PaginatedResponse<GovernanceIssueResponse> response = new PaginatedResponse<>(
+                page,  // retorna page original (1-based)
+                safeSize,
+                pageResult.getTotalElements(),
+                pageResult.getTotalPages(),
+                items
+        );
 
-            log.info("✅ Retornando {} issues (página {}/{})",
-                    items.size(), page, pageResult.getTotalPages());
+        log.info("✅ Retornando {} issues (página {}/{})",
+                items.size(), page, pageResult.getTotalPages());
 
-            return ResponseEntity.ok(response);
-
-        } catch (Exception e) {
-            log.error("❌ Erro ao buscar issues: {}", e.getMessage(), e);
-            // Retorna lista vazia em vez de 500 (robustez)
-            return ResponseEntity.ok(new PaginatedResponse<>(page, size, 0L, 0, List.of()));
-        }
+        return ResponseEntity.ok(response);
     }
 
     /**
@@ -122,47 +116,42 @@ public class GovernanceApiController {
      *
      * Retorna grupos de artigos duplicados (mesmo content_hash).
      *
-     * ROBUSTEZ: Nunca retorna 500, retorna lista vazia em caso de erro.
+     * REGRAS:
+     * - Sem duplicados = lista vazia (não é erro)
+     * - Erro real = HTTP 500 (tratado pelo GlobalExceptionHandler)
      */
     @GetMapping("/duplicates")
     @Transactional(readOnly = true)
     public ResponseEntity<List<DuplicateGroupResponse>> getDuplicates() {
         log.info("GET /api/v1/governance/duplicates");
 
-        try {
-            // 1. Busca hashes duplicados (com proteção contra null)
-            List<String> duplicateHashes = articleRepo.findDuplicateContentHashes();
-            if (duplicateHashes == null || duplicateHashes.isEmpty()) {
-                log.info("✅ Nenhum grupo de duplicados encontrado");
-                return ResponseEntity.ok(List.of());
-            }
-
-            // 2. Para cada hash, busca os artigos
-            List<DuplicateGroupResponse> groups = new ArrayList<>();
-
-            for (String hash : duplicateHashes) {
-                if (hash == null || hash.isBlank()) continue;
-
-                List<Long> articleIds = articleRepo.findArticleIdsByContentHash(hash);
-
-                if (articleIds != null && articleIds.size() > 1) {
-                    groups.add(new DuplicateGroupResponse(
-                            hash,
-                            articleIds.size(),
-                            articleIds
-                    ));
-                }
-            }
-
-            log.info("✅ Retornando {} grupos de duplicados", groups.size());
-
-            return ResponseEntity.ok(groups);
-
-        } catch (Exception e) {
-            log.error("❌ Erro ao buscar duplicados: {}", e.getMessage(), e);
-            // Retorna lista vazia em vez de 500 (robustez)
+        // 1. Busca hashes duplicados (com proteção contra null)
+        List<String> duplicateHashes = articleRepo.findDuplicateContentHashes();
+        if (duplicateHashes == null || duplicateHashes.isEmpty()) {
+            log.info("✅ Nenhum grupo de duplicados encontrado");
             return ResponseEntity.ok(List.of());
         }
+
+        // 2. Para cada hash, busca os artigos
+        List<DuplicateGroupResponse> groups = new ArrayList<>();
+
+        for (String hash : duplicateHashes) {
+            if (hash == null || hash.isBlank()) continue;
+
+            List<Long> articleIds = articleRepo.findArticleIdsByContentHash(hash);
+
+            if (articleIds != null && articleIds.size() > 1) {
+                groups.add(new DuplicateGroupResponse(
+                        hash,
+                        articleIds.size(),
+                        articleIds
+                ));
+            }
+        }
+
+        log.info("✅ Retornando {} grupos de duplicados", groups.size());
+
+        return ResponseEntity.ok(groups);
     }
 
     // ======================

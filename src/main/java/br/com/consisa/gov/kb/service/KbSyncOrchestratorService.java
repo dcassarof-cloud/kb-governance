@@ -176,11 +176,16 @@ public class KbSyncOrchestratorService {
             log.info("✅ Sync concluído. synced={} updated={} errors={} duration={}ms",
                     counts.synced, counts.updated, counts.errors, run.getDurationMs());
 
-            // 🔍 IMPORTANTE: Após sync, dispara detectores de governança automaticamente
-            // Isso garante que issues sejam criadas/atualizadas após cada sync
-            runGovernanceDetectors();
+            // IMPORTANTE: Salva o run como SUCCESS ANTES de rodar detectores
+            // Assim, se governança falhar, sync continua marcado como SUCCESS
+            KbSyncRun savedRun = runRepo.save(run);
 
-            return runRepo.save(run);
+            // 🔍 DISPARO AUTOMÁTICO DE DETECTORES PÓS-SYNC
+            // REGRA: Governança falhar NÃO pode impedir sincronização de conteúdo
+            // Se falhar: sync continua SUCCESS, erro é logado como WARN
+            runGovernanceDetectors(savedRun);
+
+            return savedRun;
 
         } catch (Exception e) {
             log.error("❌ Sync falhou: {}", e.getMessage(), e);
@@ -278,11 +283,18 @@ public class KbSyncOrchestratorService {
      *   1. Detector de conteúdo incompleto (por artigo)
      *   2. Detector de duplicados (global)
      *
+     * IMPORTANTE - ROBUSTEZ:
+     * - Governança falhar NÃO pode impedir sincronização de conteúdo
+     * - Se falhar: sync continua SUCCESS, erro é logado como WARN
+     * - Mensagem de erro é registrada no kb_sync_run.note (para rastreabilidade)
+     *
      * IDEMPOTÊNCIA:
      * - KbGovernanceIssueService.open() garante que não cria issue duplicada
      *   (busca issue OPEN existente do mesmo tipo para o mesmo artigo)
+     *
+     * @param run O registro de sync já salvo como SUCCESS
      */
-    private void runGovernanceDetectors() {
+    private void runGovernanceDetectors(KbSyncRun run) {
         log.info("🔍 Iniciando detectores de governança pós-sync...");
 
         try {
@@ -299,8 +311,15 @@ public class KbSyncOrchestratorService {
             log.info("🔍 Detectores de governança finalizados.");
 
         } catch (Exception e) {
-            // Não quebra o sync se os detectores falharem
-            log.error("⚠️ Erro ao executar detectores de governança: {}", e.getMessage(), e);
+            // REGRA: Governança falhar NÃO altera status do sync (continua SUCCESS)
+            // Apenas loga como WARN e registra no note do run
+            log.warn("⚠️ Erro ao executar detectores de governança (sync continua SUCCESS): {}", e.getMessage(), e);
+
+            // Registra erro no note do run para rastreabilidade
+            String currentNote = run.getNote();
+            String errorNote = "[GOVERNANCE_ERROR] " + trunc(e.getMessage(), 150);
+            run.setNote(currentNote != null ? currentNote + " | " + errorNote : errorNote);
+            runRepo.save(run);
         }
     }
 
