@@ -3,10 +3,13 @@ package br.com.consisa.gov.kb.controller.api;
 import br.com.consisa.gov.kb.controller.api.dto.DuplicateGroupResponse;
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueResponse;
 import br.com.consisa.gov.kb.controller.api.dto.PaginatedResponse;
+import br.com.consisa.gov.kb.dto.GovernanceManualDto;
+import br.com.consisa.gov.kb.dto.PageResponseDto;
 import br.com.consisa.gov.kb.domain.KbArticle;
 import br.com.consisa.gov.kb.domain.KbGovernanceIssue;
 import br.com.consisa.gov.kb.repository.KbArticleRepository;
 import br.com.consisa.gov.kb.repository.KbGovernanceIssueRepository;
+import br.com.consisa.gov.kb.service.GovernanceService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
@@ -37,13 +40,16 @@ public class GovernanceApiController {
 
     private final KbGovernanceIssueRepository issueRepo;
     private final KbArticleRepository articleRepo;
+    private final GovernanceService governanceService;
 
     public GovernanceApiController(
             KbGovernanceIssueRepository issueRepo,
-            KbArticleRepository articleRepo
+            KbArticleRepository articleRepo,
+            GovernanceService governanceService
     ) {
         this.issueRepo = issueRepo;
         this.articleRepo = articleRepo;
+        this.governanceService = governanceService;
     }
 
     /**
@@ -119,6 +125,30 @@ public class GovernanceApiController {
 
         log.info("✅ Retornando {} issues (página {}/{})",
                 items.size(), page, pageResult.getTotalPages());
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * GET /api/v1/governance/manuals?page=1&size=10&system=CONSISANET&status=OK&q=texto
+     *
+     * 📋 Lista manuais/artigos para tela de governança.
+     */
+    @GetMapping("/manuals")
+    @Transactional(readOnly = true)
+    public ResponseEntity<PageResponseDto<GovernanceManualDto>> getManuals(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String system,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false, name = "q") String query
+    ) {
+        log.info("GET /api/v1/governance/manuals?page={}&size={}&system={}&status={}&q={}",
+                page, size, system, status, query);
+
+        PageResponseDto<GovernanceManualDto> response = governanceService.listManuals(page, size, system, status, query);
+
+        log.info("✅ Manuais: totalItems={} totalPages={}", response.totalElements(), response.totalPages());
 
         return ResponseEntity.ok(response);
     }

@@ -290,4 +290,66 @@ public interface KbArticleRepository extends JpaRepository<KbArticle, Long> {
         """, nativeQuery = true)
     List<Object[]> findDuplicateGroups();
 
+    /**
+     * Página de manuais para governança com filtros opcionais.
+     */
+    interface GovernanceManualRow {
+        Long getId();
+        String getTitle();
+        String getSystemCode();
+        String getSystemName();
+        String getGovernanceStatus();
+        java.time.Instant getUpdatedAt();
+        Long getIssuesCount();
+    }
+
+    @Query(value = """
+        SELECT
+          a.id AS id,
+          a.title AS title,
+          COALESCE(s.code,'UNCLASSIFIED') AS systemCode,
+          COALESCE(s.name,'Não classificado') AS systemName,
+          a.governance_status AS governanceStatus,
+          a.updated_date AS updatedAt,
+          COALESCE(iss.cnt, 0) AS issuesCount
+        FROM kb_article a
+        LEFT JOIN kb_system s ON s.id = a.system_id
+        LEFT JOIN (
+            SELECT article_id, COUNT(*) AS cnt
+            FROM kb_governance_issue
+            GROUP BY article_id
+        ) iss ON iss.article_id = a.id
+        WHERE a.article_status = 1
+          AND (:system IS NULL OR s.code = :system)
+          AND (:status IS NULL OR a.governance_status = :status)
+          AND (
+            :q IS NULL
+            OR LOWER(a.title) LIKE LOWER(CONCAT('%', :q, '%'))
+            OR LOWER(a.slug) LIKE LOWER(CONCAT('%', :q, '%'))
+            OR LOWER(a.content_text) LIKE LOWER(CONCAT('%', :q, '%'))
+          )
+        ORDER BY COALESCE(a.updated_date, a.created_date) DESC
+        """,
+            countQuery = """
+        SELECT COUNT(*)
+        FROM kb_article a
+        LEFT JOIN kb_system s ON s.id = a.system_id
+        WHERE a.article_status = 1
+          AND (:system IS NULL OR s.code = :system)
+          AND (:status IS NULL OR a.governance_status = :status)
+          AND (
+            :q IS NULL
+            OR LOWER(a.title) LIKE LOWER(CONCAT('%', :q, '%'))
+            OR LOWER(a.slug) LIKE LOWER(CONCAT('%', :q, '%'))
+            OR LOWER(a.content_text) LIKE LOWER(CONCAT('%', :q, '%'))
+          )
+        """,
+            nativeQuery = true)
+    Page<GovernanceManualRow> pageGovernanceManuals(
+            Pageable pageable,
+            @Param("system") String system,
+            @Param("status") String status,
+            @Param("q") String q
+    );
+
 }

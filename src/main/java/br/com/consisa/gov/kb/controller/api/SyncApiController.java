@@ -132,6 +132,19 @@ public class SyncApiController {
     }
 
     /**
+     * POST /api/v1/sync/run
+     *
+     * Alias para /runs (compatibilidade com botão do front).
+     */
+    @PostMapping("/run")
+    public ResponseEntity<SyncRunResponse> triggerSyncAlias(
+            @RequestBody(required = false) TriggerSyncRequest request
+    ) {
+        log.info("POST /api/v1/sync/run (alias)");
+        return triggerSync(request);
+    }
+
+    /**
      * GET /api/v1/sync/config
      *
      * Retorna configuração de sync.
