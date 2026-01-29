@@ -15,13 +15,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
+
+import static br.com.consisa.gov.kb.util.DateTimeUtils.toOffsetDateTime;
 
 /**
  * 🔍 Governance API Controller
@@ -63,9 +61,13 @@ public class GovernanceApiController {
     }
 
     /**
-     * GET /api/v1/governance/issues?page=1&size=10&type=...&severity=...&status=...
+     * GET /api/v1/governance/issues?page=1&size=10&type=...&status=...
      *
-     * 📋 LISTA PAGINADA DE ISSUES DE GOVERNANÇA
+     * 📋 LISTA PAGINADA DE ISSUES DE GOVERNANÇA COM FILTROS
+     *
+     * FILTROS SUPORTADOS (Sprint 2):
+     * - type: INCOMPLETE_CONTENT, DUPLICATE_CONTENT, OUTDATED_CONTENT, INCONSISTENT_CONTENT
+     * - status: OPEN, IN_PROGRESS, RESOLVED
      *
      * REGRAS:
      * - page é 1-based (converte para 0-based internamente)
@@ -88,12 +90,19 @@ public class GovernanceApiController {
         // Converte page de 1-based para 0-based
         int pageIndex = Math.max(0, page - 1);
         int safeSize = Math.max(1, Math.min(size, 100));
-
-        // Busca issues usando a query nativa enriquecida (com artigo e sistema)
         var pageable = PageRequest.of(pageIndex, safeSize);
-        var pageResult = issueRepo.pageIssues(pageable);
 
-        log.info("📊 Total de issues no banco: {}", pageResult.getTotalElements());
+        // Usa query com filtros se type ou status foram informados
+        // Passa null para filtros vazios ou em branco
+        String filterType = (type != null && !type.isBlank()) ? type : null;
+        String filterStatus = (status != null && !status.isBlank()) ? status : null;
+
+        var pageResult = (filterType != null || filterStatus != null)
+                ? issueRepo.pageIssuesFiltered(pageable, filterType, filterStatus)
+                : issueRepo.pageIssues(pageable);
+
+        log.info("📊 Total de issues (filtros: type={}, status={}): {}",
+                filterType, filterStatus, pageResult.getTotalElements());
 
         // Mapeia para DTO com tratamento robusto
         List<GovernanceIssueResponse> items = pageResult.getContent().stream()
@@ -165,15 +174,10 @@ public class GovernanceApiController {
      * Mapeia resultado da query nativa IssueRow para DTO.
      * Já vem com artigo e sistema enriquecidos do JOIN.
      *
-     * IMPORTANTE: PostgreSQL TIMESTAMPTZ é mapeado para Instant pelo JDBC.
-     * Conversão Instant → OffsetDateTime é feita aqui com ZoneOffset.UTC.
+     * IMPORTANTE: PostgreSQL TIMESTAMPTZ → Instant → OffsetDateTime (UTC)
+     * Usa DateTimeUtils.toOffsetDateTime() para conversão centralizada.
      */
     private GovernanceIssueResponse mapIssueRowToDto(KbGovernanceIssueRepository.IssueRow row) {
-        // Converte Instant → OffsetDateTime (null-safe)
-        OffsetDateTime createdAt = row.getCreatedAt() != null
-                ? row.getCreatedAt().atOffset(ZoneOffset.UTC)
-                : OffsetDateTime.now(ZoneOffset.UTC);
-
         return new GovernanceIssueResponse(
                 row.getId(),
                 row.getIssueType() != null ? row.getIssueType() : "UNKNOWN",
@@ -184,7 +188,7 @@ public class GovernanceApiController {
                 row.getSystemCode(),
                 row.getSystemName(),
                 row.getMessage(),
-                createdAt
+                toOffsetDateTime(row.getCreatedAt())  // Instant → OffsetDateTime (UTC)
         );
     }
 
