@@ -16,18 +16,21 @@ import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
  * - criação apenas quando não existe bean definido
  *
  * Quando o builder não está disponível, cria um ObjectMapper padrão
- * e registra módulos automaticamente para manter o comportamento esperado.
+ * e registra módulos automaticamente.
  */
 @Configuration
 public class JacksonConfig {
 
     @Bean
     @ConditionalOnMissingBean(ObjectMapper.class)
-    public ObjectMapper objectMapper(ObjectProvider<Jackson2ObjectMapperBuilder> builderProvider) {
+    public ObjectMapper objectMapper(
+            ObjectProvider<Jackson2ObjectMapperBuilder> builderProvider) {
+
         Jackson2ObjectMapperBuilder builder = builderProvider.getIfAvailable();
         if (builder != null) {
             return builder.build();
         }
+
         return new ObjectMapper().findAndRegisterModules();
     }
 }
