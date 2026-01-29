@@ -10,14 +10,14 @@ import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
 /**
  * Configuração de fallback do ObjectMapper.
  *
-     * Usa o builder padrão do Spring Boot quando disponível para garantir:
-     * - compatibilidade com MappingJackson2HttpMessageConverter
-     * - respeito às customizações padrão do Spring Boot
-     * - criação apenas quando não existe bean definido
-     *
-     * Quando o builder não está disponível, cria um ObjectMapper padrão
-     * e registra módulos automaticamente para manter o comportamento esperado.
-     */
+ * Usa o builder padrão do Spring Boot quando disponível para garantir:
+ * - compatibilidade com MappingJackson2HttpMessageConverter
+ * - respeito às customizações padrão do Spring Boot
+ * - criação apenas quando não existe bean definido
+ *
+ * Quando o builder não está disponível, cria um ObjectMapper padrão
+ * e registra módulos automaticamente para manter o comportamento esperado.
+ */
 @Configuration
 public class JacksonConfig {
 
