@@ -51,7 +51,10 @@ public interface KbGovernanceIssueRepository extends JpaRepository<KbGovernanceI
     long countOpenIssues();
 
     /**
-     * Página de issues já “enriquecida” com artigo e sistema (pro front).
+     * Página de issues já "enriquecida" com artigo e sistema (pro front).
+     *
+     * IMPORTANTE: createdAt retorna java.time.Instant porque PostgreSQL TIMESTAMPTZ
+     * é mapeado para Instant pelo JDBC. A conversão para OffsetDateTime é feita no mapper.
      */
     interface IssueRow {
         Long getId();
@@ -63,7 +66,7 @@ public interface KbGovernanceIssueRepository extends JpaRepository<KbGovernanceI
         String getSystemCode();
         String getSystemName();
         String getMessage();
-        java.time.OffsetDateTime getCreatedAt();
+        java.time.Instant getCreatedAt();  // PostgreSQL TIMESTAMPTZ → Instant
     }
 
     @Query(value = """

@@ -15,6 +15,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -161,8 +164,16 @@ public class GovernanceApiController {
     /**
      * Mapeia resultado da query nativa IssueRow para DTO.
      * Já vem com artigo e sistema enriquecidos do JOIN.
+     *
+     * IMPORTANTE: PostgreSQL TIMESTAMPTZ é mapeado para Instant pelo JDBC.
+     * Conversão Instant → OffsetDateTime é feita aqui com ZoneOffset.UTC.
      */
     private GovernanceIssueResponse mapIssueRowToDto(KbGovernanceIssueRepository.IssueRow row) {
+        // Converte Instant → OffsetDateTime (null-safe)
+        OffsetDateTime createdAt = row.getCreatedAt() != null
+                ? row.getCreatedAt().atOffset(ZoneOffset.UTC)
+                : OffsetDateTime.now(ZoneOffset.UTC);
+
         return new GovernanceIssueResponse(
                 row.getId(),
                 row.getIssueType() != null ? row.getIssueType() : "UNKNOWN",
@@ -173,7 +184,7 @@ public class GovernanceApiController {
                 row.getSystemCode(),
                 row.getSystemName(),
                 row.getMessage(),
-                row.getCreatedAt() != null ? row.getCreatedAt() : java.time.OffsetDateTime.now()
+                createdAt
         );
     }
 
