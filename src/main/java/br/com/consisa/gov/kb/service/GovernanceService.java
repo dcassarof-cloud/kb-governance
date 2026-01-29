@@ -44,7 +44,7 @@ public class GovernanceService {
                         r.getSystemCode(),
                         r.getSystemName(),
                         r.getMessage(),
-                        r.getCreatedAt() != null ? r.getCreatedAt().toInstant() : Instant.now()
+                        r.getCreatedAt() != null ? r.getCreatedAt() : Instant.now()  // já é Instant
                 ))
                 .toList();
 
