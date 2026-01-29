@@ -6,7 +6,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import jakarta.servlet.http.HttpServletRequest;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.UUID;
@@ -81,6 +83,27 @@ public class GlobalExceptionHandler {
         );
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+
+    /**
+     * Handler para recurso não encontrado (ex: rota inexistente).
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNoResourceFound(NoResourceFoundException ex, HttpServletRequest request) {
+        String traceId = generateTraceId();
+
+        log.warn("⚠️ [{}] Recurso não encontrado: {}", traceId, ex.getMessage());
+
+        ErrorResponse response = new ErrorResponse(
+                traceId,
+                HttpStatus.NOT_FOUND.value(),
+                "Not Found",
+                "Recurso não encontrado",
+                request != null ? request.getRequestURI() : null,
+                OffsetDateTime.now(ZoneOffset.UTC)
+        );
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
     }
 
     /**

@@ -2,6 +2,7 @@ package br.com.consisa.gov.kb.service;
 
 import br.com.consisa.gov.kb.dto.DuplicateGroupDto;
 import br.com.consisa.gov.kb.dto.GovernanceIssueDto;
+import br.com.consisa.gov.kb.dto.GovernanceManualDto;
 import br.com.consisa.gov.kb.dto.PageResponseDto;
 import br.com.consisa.gov.kb.repository.KbArticleRepository;
 import br.com.consisa.gov.kb.repository.KbGovernanceIssueRepository;
@@ -58,6 +59,41 @@ public class GovernanceService {
     }
 
     @Transactional(readOnly = true)
+    public PageResponseDto<GovernanceManualDto> listManuals(int page1Based, int size, String system, String status, String q) {
+        int page0 = Math.max(page1Based - 1, 0);
+        int safeSize = Math.min(Math.max(size, 1), 100);
+
+        Pageable pageable = PageRequest.of(page0, safeSize);
+
+        Page<KbArticleRepository.GovernanceManualRow> page = articleRepo.pageGovernanceManuals(
+                pageable,
+                normalizeFilter(system),
+                normalizeFilter(status),
+                normalizeFilter(q)
+        );
+
+        List<GovernanceManualDto> items = page.getContent().stream()
+                .map(row -> new GovernanceManualDto(
+                        row.getId(),
+                        row.getTitle(),
+                        row.getSystemCode(),
+                        row.getSystemName(),
+                        row.getGovernanceStatus(),
+                        row.getUpdatedAt() != null ? row.getUpdatedAt() : Instant.now(),
+                        row.getIssuesCount() != null ? row.getIssuesCount() : 0L
+                ))
+                .toList();
+
+        return new PageResponseDto<>(
+                page1Based,
+                safeSize,
+                page.getTotalElements(),
+                page.getTotalPages(),
+                items
+        );
+    }
+
+    @Transactional(readOnly = true)
     public List<DuplicateGroupDto> listDuplicates() {
         return articleRepo.findDuplicateGroups().stream()
                 .map(row -> {
@@ -77,5 +113,9 @@ public class GovernanceService {
                     return new DuplicateGroupDto(hash, count, ids);
                 })
                 .toList();
+    }
+
+    private String normalizeFilter(String value) {
+        return (value == null || value.isBlank()) ? null : value;
     }
 }
