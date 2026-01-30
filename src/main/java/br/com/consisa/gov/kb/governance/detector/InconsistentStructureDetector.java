@@ -4,6 +4,7 @@ import br.com.consisa.gov.kb.domain.GovernanceSeverity;
 import br.com.consisa.gov.kb.domain.KbArticle;
 import br.com.consisa.gov.kb.domain.KbGovernanceIssueType;
 import br.com.consisa.gov.kb.governance.KbContentAnalysisService;
+import br.com.consisa.gov.kb.governance.KbGovernanceDetector;
 import br.com.consisa.gov.kb.service.KbGovernanceIssueService;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -24,7 +25,7 @@ import org.springframework.stereotype.Component;
  * - Log claro do motivo da issue
  */
 @Component
-public class InconsistentStructureDetector {
+public class InconsistentStructureDetector implements KbGovernanceDetector {
 
     private static final Logger log = LoggerFactory.getLogger(InconsistentStructureDetector.class);
 
@@ -46,9 +47,10 @@ public class InconsistentStructureDetector {
      * @param article Artigo a ser analisado
      * @return true se criou/atualizou issue, false caso contrário
      */
-    public boolean analyze(KbArticle article) {
+    @Override
+    public void analyze(KbArticle article) {
         if (article == null || article.getId() == null) {
-            return false;
+            return;
         }
 
         // Verifica se tem sistema associado
@@ -64,7 +66,7 @@ public class InconsistentStructureDetector {
 
         // Se não tem problema, não cria issue
         if (!noSystem && !isGenericSystem) {
-            return false;
+            return;
         }
 
         // Determina severidade e mensagem
@@ -97,8 +99,6 @@ public class InconsistentStructureDetector {
         );
 
         log.debug("Issue INCONSISTENT_CONTENT criada para artigo {}: {}", article.getId(), reason);
-
-        return true;
     }
 
     /**

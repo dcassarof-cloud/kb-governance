@@ -10,8 +10,9 @@ import java.util.List;
  */
 public record DashboardSummaryDto(
         long totalArticles,
-        long okCount,
-        long issuesCount,
+        long articlesOk,
+        long articlesWithIssues,
+        long totalIssues,
         long duplicatesCount,
         List<BySystem> bySystem,
         List<ByStatus> byStatus

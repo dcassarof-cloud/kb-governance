@@ -23,12 +23,11 @@ public class DashboardService {
 
     @Transactional(readOnly = true)
     public DashboardSummaryDto getSummary() {
-        long totalArticles = articleRepo.countActiveArticles();
+        long totalArticles = articleRepo.count();
 
-        // “OK” no teu schema é APPROVED (status do fluxo)
-        long okCount = articleRepo.countActiveByGovernanceStatus("APPROVED");
-
-        long issuesCount = issueRepo.countByStatus(GovernanceIssueStatus.OPEN);
+        long articlesWithIssues = issueRepo.countDistinctArticlesWithIssues();
+        long articlesOk = Math.max(0, totalArticles - articlesWithIssues);
+        long totalIssues = issueRepo.countTotalIssues();
 
         // Duplicados = issues abertas do tipo DUPLICATE_CONTENT (alinha com teu detector)
         long duplicatesCount = issueRepo.countByStatusAndIssueType(
@@ -44,17 +43,16 @@ public class DashboardService {
                 ))
                 .toList();
 
-        List<DashboardSummaryDto.ByStatus> byStatus = articleRepo.countActiveByGovernanceStatus().stream()
-                .map(r -> new DashboardSummaryDto.ByStatus(
-                        String.valueOf(r[0]),
-                        ((Number) r[1]).longValue()
-                ))
-                .toList();
+        List<DashboardSummaryDto.ByStatus> byStatus = List.of(
+                new DashboardSummaryDto.ByStatus("OK", articlesOk),
+                new DashboardSummaryDto.ByStatus("WITH_ISSUES", articlesWithIssues)
+        );
 
         return new DashboardSummaryDto(
                 totalArticles,
-                okCount,
-                issuesCount,
+                articlesOk,
+                articlesWithIssues,
+                totalIssues,
                 duplicatesCount,
                 bySystem,
                 byStatus

@@ -63,6 +63,7 @@ public interface KbArticleRepository extends JpaRepository<KbArticle, Long> {
            from KbArticle a
            where a.contentHash is not null
              and a.contentHash <> ''
+             and lower(a.contentHash) <> 'n/a'
            group by a.contentHash
            having count(a.id) > 1
            order by count(a.id) desc
@@ -74,7 +75,9 @@ public interface KbArticleRepository extends JpaRepository<KbArticle, Long> {
     @Query("""
     select a.contentHash
     from KbArticle a
-    where a.contentHash is not null and a.contentHash <> ''
+    where a.contentHash is not null
+      and a.contentHash <> ''
+      and lower(a.contentHash) <> 'n/a'
     group by a.contentHash
     having count(a) > 1
 """)
@@ -87,6 +90,28 @@ public interface KbArticleRepository extends JpaRepository<KbArticle, Long> {
     order by a.updatedDate desc nulls last
 """)
     List<Long> findArticleIdsByContentHash(@Param("hash") String hash);
+
+    interface DuplicateArticleRow {
+        Long getId();
+        String getTitle();
+        String getSystemCode();
+        java.time.Instant getUpdatedAt();
+        String getSourceUrl();
+    }
+
+    @Query(value = """
+        SELECT
+          a.id AS id,
+          a.title AS title,
+          COALESCE(s.code,'UNCLASSIFIED') AS systemCode,
+          a.updated_date AS updatedAt,
+          a.source_url AS sourceUrl
+        FROM kb_article a
+        LEFT JOIN kb_system s ON s.id = a.system_id
+        WHERE a.content_hash = :hash
+        ORDER BY a.updated_date DESC NULLS LAST
+        """, nativeQuery = true)
+    List<DuplicateArticleRow> findDuplicateArticlesByHash(@Param("hash") String hash);
 
     @Query("""
         select a

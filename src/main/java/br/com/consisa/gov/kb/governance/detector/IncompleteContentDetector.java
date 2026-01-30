@@ -1,6 +1,7 @@
 package br.com.consisa.gov.kb.governance.detector;
 
 import br.com.consisa.gov.kb.domain.*;
+import br.com.consisa.gov.kb.governance.KbGovernanceDetector;
 import br.com.consisa.gov.kb.governance.KbContentAnalysisService;
 import br.com.consisa.gov.kb.service.KbGovernanceIssueService;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -11,7 +12,7 @@ import org.springframework.stereotype.Component;
  * Detector: conteúdo incompleto.
  */
 @Component
-public class IncompleteContentDetector {
+public class IncompleteContentDetector implements KbGovernanceDetector {
 
     private static final int MIN_CHARS = 500;
 
@@ -24,6 +25,7 @@ public class IncompleteContentDetector {
         this.issueService = issueService;
     }
 
+    @Override
     public void analyze(KbArticle article) {
         if (article == null || article.getId() == null) return;
 

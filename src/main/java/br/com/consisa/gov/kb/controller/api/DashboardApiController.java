@@ -45,15 +45,12 @@ public class DashboardApiController {
      *
      * 📊 REGRAS DE NEGÓCIO (Sprint 1):
      *
-     * - "Issues" = total de issues abertas (OPEN ou IN_PROGRESS)
-     *   → Issue em tratamento (IN_PROGRESS) ainda é problema aberto
-     *   → Só fecha quando status = RESOLVED
+     * - "Total Articles" = COUNT(*) em kb_article
+     * - "Articles With Issues" = COUNT(DISTINCT article_id) em kb_governance_issue
+     * - "Articles OK" = totalArticles - articlesWithIssues
+     * - "Total Issues" = COUNT(*) em kb_governance_issue (informativo)
      *
-     * - "OK" = total de artigos ATIVOS − artigos DISTINTOS com issue aberta
-     *   → Um artigo com 3 issues abertas conta como 1 artigo com problema
-     *   → OK nunca será 100% se houver issues abertas
-     *
-     * - "Duplicados" = quantidade de grupos de hashes duplicados
+     * - "Duplicados" = quantidade de grupos de hashes duplicados (informativo)
      *
      * IMPORTANTE:
      * - Erro real = HTTP 500 (tratado pelo GlobalExceptionHandler)
@@ -63,19 +60,17 @@ public class DashboardApiController {
     public ResponseEntity<DashboardSummaryResponse> getSummary() {
         log.info("GET /api/v1/dashboard/summary");
 
-        // 1. Total de artigos ativos (article_status = 1)
-        long totalArticles = articleRepo.countActiveArticles();
+        // 1. Total de artigos (sem filtro de status)
+        long totalArticles = articleRepo.count();
 
-        // 2. Issues abertas (status = OPEN ou IN_PROGRESS)
-        // REGRA: "Issue aberta" = OPEN ou IN_PROGRESS
-        // Quando analista assume issue (IN_PROGRESS), continua sendo problema aberto
-        long issuesCount = issueRepo.countOpenIssues();
+        // 2. Artigos com issues (distinct article_id em kb_governance_issue)
+        long articlesWithIssues = issueRepo.countDistinctArticlesWithIssues();
 
         // 3. Artigos OK
-        // REGRA: "OK" = total de artigos − artigos DISTINTOS com issue aberta
-        // Um artigo com múltiplas issues conta só uma vez como "com problema"
-        long articlesWithIssues = issueRepo.countDistinctArticlesWithOpenIssues();
-        long okCount = Math.max(0, totalArticles - articlesWithIssues);
+        long articlesOk = Math.max(0, totalArticles - articlesWithIssues);
+
+        // 4. Total de issues (informativo)
+        long totalIssues = issueRepo.countTotalIssues();
 
         // 4. Duplicados (quantidade de grupos de hashes duplicados)
         List<String> duplicateHashes = articleRepo.findDuplicateContentHashes();
@@ -95,21 +90,22 @@ public class DashboardApiController {
 
         // 6. Por status (baseado em artigos distintos, não total de issues)
         List<DashboardSummaryResponse.ByStatus> byStatus = List.of(
-                new DashboardSummaryResponse.ByStatus("OK", okCount),
+                new DashboardSummaryResponse.ByStatus("OK", articlesOk),
                 new DashboardSummaryResponse.ByStatus("WITH_ISSUES", articlesWithIssues)
         );
 
         DashboardSummaryResponse response = new DashboardSummaryResponse(
                 totalArticles,
-                okCount,
-                issuesCount,
+                articlesOk,
+                articlesWithIssues,
+                totalIssues,
                 duplicatesCount,
                 bySystem,
                 byStatus
         );
 
-        log.info("✅ Dashboard: total={} OK={} issues={} withIssues={} duplicates={}",
-                totalArticles, okCount, issuesCount, articlesWithIssues, duplicatesCount);
+        log.info("✅ Dashboard: total={} OK={} withIssues={} totalIssues={} duplicates={}",
+                totalArticles, articlesOk, articlesWithIssues, totalIssues, duplicatesCount);
 
         return ResponseEntity.ok(response);
     }
