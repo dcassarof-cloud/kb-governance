@@ -20,6 +20,11 @@ public interface KbGovernanceIssueRepository extends JpaRepository<KbGovernanceI
             KbGovernanceIssueType issueType,
             GovernanceIssueStatus status
     );
+
+    Optional<KbGovernanceIssue> findTop1ByArticleIdAndIssueTypeOrderByCreatedAtDesc(
+            Long articleId,
+            KbGovernanceIssueType issueType
+    );
     long countByStatus(GovernanceIssueStatus status);
 
     long countByStatusAndIssueType(GovernanceIssueStatus status, KbGovernanceIssueType issueType);
@@ -37,32 +42,40 @@ public interface KbGovernanceIssueRepository extends JpaRepository<KbGovernanceI
     Set<Long> findArticleIdsWithOpenIssues(@org.springframework.data.repository.query.Param("statuses") List<GovernanceIssueStatus> statuses);
 
     /**
-     * 📊 Conta artigos DISTINTOS com issues abertas (OPEN ou IN_PROGRESS).
+     * 📊 Conta artigos DISTINTOS com issues abertas (OPEN, ASSIGNED ou IN_PROGRESS).
      * Usado para calcular: OK = totalArtigos - artigosComIssueAberta
      *
      * REGRA DE NEGÓCIO (Sprint 1):
-     * - "Issue aberta" = status OPEN ou IN_PROGRESS
+     * - "Issue aberta" = status OPEN, ASSIGNED ou IN_PROGRESS
      * - Quando analista assume issue (IN_PROGRESS), continua sendo problema aberto
      * - Um artigo com múltiplas issues abertas conta só uma vez
      * - Só deixa de contar quando TODAS as issues do artigo são RESOLVED
      */
     @Query("SELECT COUNT(DISTINCT i.articleId) FROM KbGovernanceIssue i " +
            "WHERE i.status IN (br.com.consisa.gov.kb.domain.GovernanceIssueStatus.OPEN, " +
+           "br.com.consisa.gov.kb.domain.GovernanceIssueStatus.ASSIGNED, " +
            "br.com.consisa.gov.kb.domain.GovernanceIssueStatus.IN_PROGRESS)")
     long countDistinctArticlesWithOpenIssues();
 
     /**
-     * 📊 Conta total de issues abertas (OPEN ou IN_PROGRESS).
+     * 📊 Conta total de issues abertas (OPEN, ASSIGNED ou IN_PROGRESS).
      *
      * REGRA DE NEGÓCIO (Sprint 1):
-     * - "Issue aberta" = OPEN ou IN_PROGRESS
+     * - "Issue aberta" = OPEN, ASSIGNED ou IN_PROGRESS
      * - Issue em tratamento (IN_PROGRESS) ainda é problema aberto
      * - Só fecha quando status = RESOLVED
      */
     @Query("SELECT COUNT(i) FROM KbGovernanceIssue i " +
            "WHERE i.status IN (br.com.consisa.gov.kb.domain.GovernanceIssueStatus.OPEN, " +
+           "br.com.consisa.gov.kb.domain.GovernanceIssueStatus.ASSIGNED, " +
            "br.com.consisa.gov.kb.domain.GovernanceIssueStatus.IN_PROGRESS)")
     long countOpenIssues();
+
+    @Query("SELECT COUNT(DISTINCT i.articleId) FROM KbGovernanceIssue i")
+    long countDistinctArticlesWithIssues();
+
+    @Query("SELECT COUNT(i) FROM KbGovernanceIssue i")
+    long countTotalIssues();
 
     /**
      * Página de issues já "enriquecida" com artigo e sistema (pro front).
@@ -129,23 +142,73 @@ public interface KbGovernanceIssueRepository extends JpaRepository<KbGovernanceI
         FROM kb_governance_issue i
         JOIN kb_article a ON a.id = i.article_id
         LEFT JOIN kb_system s ON s.id = a.system_id
+        LEFT JOIN LATERAL (
+            SELECT ia.agent_id, ia.agent_name
+            FROM kb_governance_issue_assignment ia
+            WHERE ia.issue_id = i.id
+            ORDER BY ia.created_at DESC
+            LIMIT 1
+        ) last_assign ON true
         WHERE a.article_status = 1
           AND (:issueType IS NULL OR i.issue_type = :issueType)
+          AND (:severity IS NULL OR i.severity = :severity)
           AND (:status IS NULL OR i.status = :status)
+          AND (:systemCode IS NULL OR s.code = :systemCode)
+          AND (
+              :responsible IS NULL
+              OR last_assign.agent_id = :responsible
+              OR lower(last_assign.agent_name) LIKE lower(concat('%', :responsible, '%'))
+          )
         ORDER BY i.created_at DESC
         """,
             countQuery = """
         SELECT COUNT(*)
         FROM kb_governance_issue i
         JOIN kb_article a ON a.id = i.article_id
+        LEFT JOIN kb_system s ON s.id = a.system_id
+        LEFT JOIN LATERAL (
+            SELECT ia.agent_id, ia.agent_name
+            FROM kb_governance_issue_assignment ia
+            WHERE ia.issue_id = i.id
+            ORDER BY ia.created_at DESC
+            LIMIT 1
+        ) last_assign ON true
         WHERE a.article_status = 1
           AND (:issueType IS NULL OR i.issue_type = :issueType)
+          AND (:severity IS NULL OR i.severity = :severity)
           AND (:status IS NULL OR i.status = :status)
+          AND (:systemCode IS NULL OR s.code = :systemCode)
+          AND (
+              :responsible IS NULL
+              OR last_assign.agent_id = :responsible
+              OR lower(last_assign.agent_name) LIKE lower(concat('%', :responsible, '%'))
+          )
         """,
             nativeQuery = true)
     Page<IssueRow> pageIssuesFiltered(
             Pageable pageable,
             @org.springframework.data.repository.query.Param("issueType") String issueType,
-            @org.springframework.data.repository.query.Param("status") String status
+            @org.springframework.data.repository.query.Param("severity") String severity,
+            @org.springframework.data.repository.query.Param("status") String status,
+            @org.springframework.data.repository.query.Param("systemCode") String systemCode,
+            @org.springframework.data.repository.query.Param("responsible") String responsible
     );
+
+    @Query(value = """
+        SELECT i.id
+        FROM kb_governance_issue i
+        JOIN kb_article a ON a.id = i.article_id
+        WHERE i.issue_type = 'DUPLICATE_CONTENT'
+          AND a.content_hash = :hash
+        """, nativeQuery = true)
+    List<Long> findDuplicateIssueIdsByHash(@org.springframework.data.repository.query.Param("hash") String hash);
+
+    @Query(value = """
+        SELECT i.status
+        FROM kb_governance_issue i
+        JOIN kb_article a ON a.id = i.article_id
+        WHERE i.issue_type = 'DUPLICATE_CONTENT'
+          AND a.content_hash = :hash
+        """, nativeQuery = true)
+    List<String> findDuplicateIssueStatusesByHash(@org.springframework.data.repository.query.Param("hash") String hash);
 }

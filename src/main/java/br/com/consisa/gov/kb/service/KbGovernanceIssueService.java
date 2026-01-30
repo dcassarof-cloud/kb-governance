@@ -3,6 +3,8 @@ package br.com.consisa.gov.kb.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import br.com.consisa.gov.kb.domain.*;
 import br.com.consisa.gov.kb.repository.KbGovernanceIssueRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,6 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class KbGovernanceIssueService {
+
+    private static final Logger log = LoggerFactory.getLogger(KbGovernanceIssueService.class);
 
     private final KbGovernanceIssueRepository repo;
 
@@ -25,19 +29,29 @@ public class KbGovernanceIssueService {
                                   String message,
                                   JsonNode evidence) {
 
-        var existing = repo.findTop1ByArticleIdAndIssueTypeAndStatusOrderByCreatedAtDesc(
-                articleId, type, GovernanceIssueStatus.OPEN
-        );
+        var existing = repo.findTop1ByArticleIdAndIssueTypeOrderByCreatedAtDesc(articleId, type);
 
         KbGovernanceIssue issue = existing.orElseGet(KbGovernanceIssue::new);
+        GovernanceIssueStatus previousStatus = issue.getStatus();
         issue.setArticleId(articleId);
         issue.setIssueType(type);
-        issue.setStatus(GovernanceIssueStatus.OPEN);
+        if (previousStatus == GovernanceIssueStatus.RESOLVED || previousStatus == GovernanceIssueStatus.IGNORED) {
+            issue.setStatus(GovernanceIssueStatus.OPEN);
+            issue.setResolvedAt(null);
+            issue.setResolvedBy(null);
+        } else if (previousStatus == null) {
+            issue.setStatus(GovernanceIssueStatus.OPEN);
+        }
         issue.setSeverity(severity);
         issue.setMessage(trunc(message, 400));
         issue.setEvidence(evidence);
 
-        return repo.save(issue);
+        KbGovernanceIssue saved = repo.save(issue);
+        if (previousStatus != null && previousStatus != saved.getStatus()) {
+            log.info("🔁 Issue reaberta: articleId={} type={} status {} -> {}",
+                    articleId, type, previousStatus, saved.getStatus());
+        }
+        return saved;
     }
 
     private static String trunc(String s, int max) {

@@ -1,6 +1,7 @@
 package br.com.consisa.gov.kb.governance.detector;
 
 import br.com.consisa.gov.kb.domain.*;
+import br.com.consisa.gov.kb.governance.KbGovernanceDetector;
 import br.com.consisa.gov.kb.service.KbGovernanceIssueService;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -25,7 +26,7 @@ import java.time.temporal.ChronoUnit;
  * - Pode ser ajustado conforme necessidade do negócio
  */
 @Component
-public class OutdatedContentDetector {
+public class OutdatedContentDetector implements KbGovernanceDetector {
 
     private static final Logger log = LoggerFactory.getLogger(OutdatedContentDetector.class);
 
@@ -47,9 +48,10 @@ public class OutdatedContentDetector {
      * @param article Artigo a ser analisado
      * @return true se criou/atualizou issue, false caso contrário
      */
-    public boolean analyze(KbArticle article) {
+    @Override
+    public void analyze(KbArticle article) {
         if (article == null || article.getId() == null) {
-            return false;
+            return;
         }
 
         // Usa updated_at ou created_at como fallback
@@ -61,7 +63,7 @@ public class OutdatedContentDetector {
         // Se não tem nenhuma data, não pode avaliar
         if (lastUpdate == null) {
             log.debug("Artigo {} sem data de atualização/criação, ignorando", article.getId());
-            return false;
+            return;
         }
 
         // Calcula dias desde última atualização
@@ -70,7 +72,7 @@ public class OutdatedContentDetector {
 
         // Se está dentro do prazo, não cria issue
         if (daysSinceUpdate <= MAX_DAYS_WITHOUT_UPDATE) {
-            return false;
+            return;
         }
 
         // Determina severidade baseada no tempo
@@ -103,7 +105,5 @@ public class OutdatedContentDetector {
 
         log.debug("Issue OUTDATED_CONTENT criada para artigo {}: {} dias sem atualização",
                 article.getId(), daysSinceUpdate);
-
-        return true;
     }
 }

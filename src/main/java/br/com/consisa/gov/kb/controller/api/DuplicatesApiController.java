@@ -1,7 +1,11 @@
 package br.com.consisa.gov.kb.controller.api;
 
+import br.com.consisa.gov.kb.controller.api.dto.DuplicateGroupActionRequest;
+import br.com.consisa.gov.kb.controller.api.dto.DuplicateGroupDetailResponse;
+import br.com.consisa.gov.kb.controller.api.dto.DuplicateGroupPrimaryRequest;
 import br.com.consisa.gov.kb.controller.api.dto.DuplicateGroupResponse;
 import br.com.consisa.gov.kb.repository.KbArticleRepository;
+import br.com.consisa.gov.kb.service.DuplicateGroupService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -25,9 +29,12 @@ public class DuplicatesApiController {
     private static final Logger log = LoggerFactory.getLogger(DuplicatesApiController.class);
 
     private final KbArticleRepository articleRepo;
+    private final DuplicateGroupService duplicateGroupService;
 
-    public DuplicatesApiController(KbArticleRepository articleRepo) {
+    public DuplicatesApiController(KbArticleRepository articleRepo,
+                                   DuplicateGroupService duplicateGroupService) {
         this.articleRepo = articleRepo;
+        this.duplicateGroupService = duplicateGroupService;
     }
 
     /**
@@ -65,5 +72,52 @@ public class DuplicatesApiController {
             log.error("❌ Erro ao buscar duplicados: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError().build();
         }
+    }
+
+    /**
+     * GET /api/v1/duplicates/groups
+     * Lista grupos de duplicados com artigos.
+     */
+    @GetMapping("/groups")
+    @Transactional(readOnly = true)
+    public ResponseEntity<List<DuplicateGroupDetailResponse>> listGroups() {
+        log.info("GET /api/v1/duplicates/groups");
+        return ResponseEntity.ok(duplicateGroupService.listGroups());
+    }
+
+    /**
+     * POST /api/v1/duplicates/groups/{id}/primary
+     */
+    @PostMapping("/groups/{id}/primary")
+    public ResponseEntity<Void> setPrimary(
+            @PathVariable("id") String hash,
+            @RequestBody DuplicateGroupPrimaryRequest request
+    ) {
+        duplicateGroupService.setPrimary(hash, request.primaryArticleId(), request.actor());
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * POST /api/v1/duplicates/groups/{id}/ignore
+     */
+    @PostMapping("/groups/{id}/ignore")
+    public ResponseEntity<Void> ignoreGroup(
+            @PathVariable("id") String hash,
+            @RequestBody DuplicateGroupActionRequest request
+    ) {
+        duplicateGroupService.ignoreGroup(hash, request.actor());
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * POST /api/v1/duplicates/groups/{id}/merge-request
+     */
+    @PostMapping("/groups/{id}/merge-request")
+    public ResponseEntity<Void> mergeRequest(
+            @PathVariable("id") String hash,
+            @RequestBody DuplicateGroupActionRequest request
+    ) {
+        duplicateGroupService.requestMerge(hash, request.actor());
+        return ResponseEntity.ok().build();
     }
 }

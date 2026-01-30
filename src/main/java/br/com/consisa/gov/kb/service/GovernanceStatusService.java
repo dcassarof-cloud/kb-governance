@@ -17,7 +17,7 @@ import java.util.stream.Collectors;
  * 📊 Service central para cálculo de status de governança.
  *
  * REGRA DE NEGÓCIO (Sprint 2):
- * - OK = artigo sem issues abertas (OPEN ou IN_PROGRESS)
+ * - OK = artigo sem issues abertas (OPEN, ASSIGNED ou IN_PROGRESS)
  * - WITH_ISSUES = artigo com pelo menos 1 issue aberta
  * - IGNORED = artigo marcado como ignorado (futuro)
  *
@@ -47,10 +47,10 @@ public class GovernanceStatusService {
             return GovernanceStatus.OK;
         }
 
-        // Verifica se existe pelo menos 1 issue aberta (OPEN ou IN_PROGRESS)
+        // Verifica se existe pelo menos 1 issue aberta (OPEN, ASSIGNED ou IN_PROGRESS)
         boolean hasOpenIssue = issueRepo.existsByArticleIdAndStatusIn(
                 articleId,
-                List.of(GovernanceIssueStatus.OPEN, GovernanceIssueStatus.IN_PROGRESS)
+                List.of(GovernanceIssueStatus.OPEN, GovernanceIssueStatus.ASSIGNED, GovernanceIssueStatus.IN_PROGRESS)
         );
 
         return hasOpenIssue ? GovernanceStatus.WITH_ISSUES : GovernanceStatus.OK;
@@ -69,9 +69,9 @@ public class GovernanceStatusService {
             return Map.of();
         }
 
-        // Busca todos os artigos que têm issues abertas (OPEN ou IN_PROGRESS)
+        // Busca todos os artigos que têm issues abertas (OPEN, ASSIGNED ou IN_PROGRESS)
         Set<Long> articlesWithOpenIssues = issueRepo.findArticleIdsWithOpenIssues(
-                List.of(GovernanceIssueStatus.OPEN, GovernanceIssueStatus.IN_PROGRESS)
+                List.of(GovernanceIssueStatus.OPEN, GovernanceIssueStatus.ASSIGNED, GovernanceIssueStatus.IN_PROGRESS)
         );
 
         // Monta o mapa de status

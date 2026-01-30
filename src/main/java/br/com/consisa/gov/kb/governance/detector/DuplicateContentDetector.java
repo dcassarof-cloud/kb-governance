@@ -3,6 +3,7 @@ package br.com.consisa.gov.kb.governance.detector;
 import br.com.consisa.gov.kb.domain.GovernanceSeverity;
 import br.com.consisa.gov.kb.domain.KbArticle;
 import br.com.consisa.gov.kb.domain.KbGovernanceIssueType;
+import br.com.consisa.gov.kb.governance.KbGovernanceDetector;
 import br.com.consisa.gov.kb.repository.KbArticleRepository;
 import br.com.consisa.gov.kb.service.KbGovernanceIssueService;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -16,7 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 @Component
-public class DuplicateContentDetector {
+public class DuplicateContentDetector implements KbGovernanceDetector {
 
     private static final Logger log = LoggerFactory.getLogger(DuplicateContentDetector.class);
 
@@ -27,6 +28,14 @@ public class DuplicateContentDetector {
                                     KbGovernanceIssueService issueService) {
         this.articleRepo = articleRepo;
         this.issueService = issueService;
+    }
+
+    @Override
+    public void analyze(KbArticle article) {
+        if (article == null || article.getContentHash() == null) {
+            return;
+        }
+        analyzeHash(article.getContentHash());
     }
 
     /**
@@ -53,6 +62,7 @@ public class DuplicateContentDetector {
     @Transactional
     public int analyzeHash(String hash) {
         if (hash == null || hash.isBlank()) return 0;
+        if ("N/A".equalsIgnoreCase(hash.trim())) return 0;
 
         final List<KbArticle> group = articleRepo.findByContentHashOrderByUpdatedDateDesc(hash);
         if (group == null || group.size() < 2) return 0;

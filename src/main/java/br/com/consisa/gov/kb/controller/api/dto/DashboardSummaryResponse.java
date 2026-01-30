@@ -8,8 +8,9 @@ import java.util.List;
  * Formato esperado pelo front:
  * {
  *   "totalArticles": 1103,
- *   "okCount": 856,
- *   "issuesCount": 247,
+ *   "articlesOk": 856,
+ *   "articlesWithIssues": 247,
+ *   "totalIssues": 412,
  *   "duplicatesCount": 23,
  *   "bySystem": [...],
  *   "byStatus": [...]
@@ -17,8 +18,9 @@ import java.util.List;
  */
 public record DashboardSummaryResponse(
         long totalArticles,
-        long okCount,
-        long issuesCount,
+        long articlesOk,
+        long articlesWithIssues,
+        long totalIssues,
         long duplicatesCount,
         List<BySystem> bySystem,
         List<ByStatus> byStatus

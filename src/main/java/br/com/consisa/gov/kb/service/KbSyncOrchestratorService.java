@@ -280,7 +280,7 @@ public class KbSyncOrchestratorService {
      *
      * REGRA DE NEGÓCIO (Sprint 1):
      * - Após finalizar o SYNC, disparar automaticamente:
-     *   1. Detector de conteúdo incompleto (por artigo)
+     *   1. Pipeline de detectores por artigo (incomplete, inconsistent, outdated, duplicate)
      *   2. Detector de duplicados (global)
      *
      * IMPORTANTE - ROBUSTEZ:
@@ -298,10 +298,10 @@ public class KbSyncOrchestratorService {
         log.info("🔍 Iniciando detectores de governança pós-sync...");
 
         try {
-            // 1. Detector de conteúdo incompleto - analisa artigos recentes
+            // 1. Pipeline de detectores por artigo (todos os detectores)
             // Analisa os últimos 200 artigos (ajustar conforme necessidade)
             int analyzedArticles = governanceDetector.analyzeRecent(200);
-            log.info("✅ Detector INCOMPLETE_CONTENT: {} artigos analisados", analyzedArticles);
+            log.info("✅ Pipeline de governança: {} artigos analisados", analyzedArticles);
 
             // 2. Detector de duplicados - analisa todos os hashes duplicados
             // IMPORTANTE: Duplicados agora geram kb_governance_issue

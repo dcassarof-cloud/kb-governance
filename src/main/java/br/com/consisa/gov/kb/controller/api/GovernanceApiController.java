@@ -1,15 +1,22 @@
 package br.com.consisa.gov.kb.controller.api;
 
 import br.com.consisa.gov.kb.controller.api.dto.DuplicateGroupResponse;
+import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueAssignmentResponse;
+import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueAssignRequest;
+import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueHistoryResponse;
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueResponse;
+import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueStatusResponse;
+import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueStatusUpdateRequest;
 import br.com.consisa.gov.kb.controller.api.dto.PaginatedResponse;
 import br.com.consisa.gov.kb.dto.GovernanceManualDto;
 import br.com.consisa.gov.kb.dto.PageResponseDto;
+import br.com.consisa.gov.kb.domain.GovernanceIssueStatus;
 import br.com.consisa.gov.kb.domain.KbArticle;
 import br.com.consisa.gov.kb.domain.KbGovernanceIssue;
 import br.com.consisa.gov.kb.repository.KbArticleRepository;
 import br.com.consisa.gov.kb.repository.KbGovernanceIssueRepository;
 import br.com.consisa.gov.kb.service.GovernanceService;
+import br.com.consisa.gov.kb.service.GovernanceIssueWorkflowService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
@@ -41,15 +48,18 @@ public class GovernanceApiController {
     private final KbGovernanceIssueRepository issueRepo;
     private final KbArticleRepository articleRepo;
     private final GovernanceService governanceService;
+    private final GovernanceIssueWorkflowService workflowService;
 
     public GovernanceApiController(
             KbGovernanceIssueRepository issueRepo,
             KbArticleRepository articleRepo,
-            GovernanceService governanceService
+            GovernanceService governanceService,
+            GovernanceIssueWorkflowService workflowService
     ) {
         this.issueRepo = issueRepo;
         this.articleRepo = articleRepo;
         this.governanceService = governanceService;
+        this.workflowService = workflowService;
     }
 
     /**
@@ -63,7 +73,7 @@ public class GovernanceApiController {
             @RequestParam(defaultValue = "10") int size
     ) {
         log.info("GET /api/v1/governance (redirecting to /issues)");
-        return getIssues(page, size, null, null, null, null);
+        return getIssues(page, size, null, null, null, null, null);
     }
 
     /**
@@ -89,9 +99,11 @@ public class GovernanceApiController {
             @RequestParam(required = false) String type,
             @RequestParam(required = false) String severity,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) String systemCode
+            @RequestParam(required = false) String systemCode,
+            @RequestParam(required = false) String responsible
     ) {
-        log.info("GET /api/v1/governance/issues?page={}&size={}&type={}&status={}", page, size, type, status);
+        log.info("GET /api/v1/governance/issues?page={}&size={}&type={}&status={}&systemCode={}&responsible={}",
+                page, size, type, status, systemCode, responsible);
 
         // Converte page de 1-based para 0-based
         int pageIndex = Math.max(0, page - 1);
@@ -101,14 +113,17 @@ public class GovernanceApiController {
         // Usa query com filtros se type ou status foram informados
         // Passa null para filtros vazios ou em branco
         String filterType = (type != null && !type.isBlank()) ? type : null;
+        String filterSeverity = (severity != null && !severity.isBlank()) ? severity : null;
         String filterStatus = (status != null && !status.isBlank()) ? status : null;
+        String filterSystemCode = (systemCode != null && !systemCode.isBlank()) ? systemCode : null;
+        String filterResponsible = (responsible != null && !responsible.isBlank()) ? responsible : null;
 
-        var pageResult = (filterType != null || filterStatus != null)
-                ? issueRepo.pageIssuesFiltered(pageable, filterType, filterStatus)
+        var pageResult = (filterType != null || filterStatus != null || filterSeverity != null || filterSystemCode != null || filterResponsible != null)
+                ? issueRepo.pageIssuesFiltered(pageable, filterType, filterSeverity, filterStatus, filterSystemCode, filterResponsible)
                 : issueRepo.pageIssues(pageable);
 
-        log.info("📊 Total de issues (filtros: type={}, status={}): {}",
-                filterType, filterStatus, pageResult.getTotalElements());
+        log.info("📊 Total de issues (filtros: type={}, status={}, system={}, responsible={}): {}",
+                filterType, filterStatus, filterSystemCode, filterResponsible, pageResult.getTotalElements());
 
         // Mapeia para DTO com tratamento robusto
         List<GovernanceIssueResponse> items = pageResult.getContent().stream()
@@ -127,6 +142,71 @@ public class GovernanceApiController {
                 items.size(), page, pageResult.getTotalPages());
 
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * POST /api/v1/governance/issues/{id}/assign
+     */
+    @PostMapping("/issues/{id}/assign")
+    public ResponseEntity<GovernanceIssueAssignmentResponse> assignIssue(
+            @PathVariable Long id,
+            @RequestBody GovernanceIssueAssignRequest request
+    ) {
+        var assignment = workflowService.assignIssue(
+                id,
+                request.agentId(),
+                request.agentName(),
+                request.dueDate(),
+                request.actor()
+        );
+
+        return ResponseEntity.ok(new GovernanceIssueAssignmentResponse(
+                assignment.getId(),
+                assignment.getIssueId(),
+                assignment.getAgentId(),
+                assignment.getAgentName(),
+                assignment.getStatus().name(),
+                assignment.getAssignedAt(),
+                assignment.getDueDate()
+        ));
+    }
+
+    /**
+     * PATCH /api/v1/governance/issues/{id}/status
+     */
+    @PatchMapping("/issues/{id}/status")
+    public ResponseEntity<GovernanceIssueStatusResponse> updateIssueStatus(
+            @PathVariable Long id,
+            @RequestBody GovernanceIssueStatusUpdateRequest request
+    ) {
+        if (request.status() == null || request.status().isBlank()) {
+            throw new IllegalArgumentException("Status é obrigatório");
+        }
+        String statusValue = request.status().toUpperCase();
+        GovernanceIssueStatus newStatus = GovernanceIssueStatus.valueOf(statusValue);
+        var issue = workflowService.updateStatus(id, newStatus, request.actor());
+        return ResponseEntity.ok(new GovernanceIssueStatusResponse(issue.getId(), issue.getStatus().name()));
+    }
+
+    /**
+     * GET /api/v1/governance/issues/{id}/history
+     */
+    @GetMapping("/issues/{id}/history")
+    @Transactional(readOnly = true)
+    public ResponseEntity<List<GovernanceIssueHistoryResponse>> getIssueHistory(@PathVariable Long id) {
+        var history = workflowService.getHistory(id).stream()
+                .map(item -> new GovernanceIssueHistoryResponse(
+                        item.getId(),
+                        item.getIssueId(),
+                        item.getAction(),
+                        item.getOldValue(),
+                        item.getNewValue(),
+                        item.getActor(),
+                        item.getCreatedAt()
+                ))
+                .toList();
+
+        return ResponseEntity.ok(history);
     }
 
     /**
