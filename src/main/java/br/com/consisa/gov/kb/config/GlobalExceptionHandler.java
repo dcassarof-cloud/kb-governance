@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import br.com.consisa.gov.kb.exception.IntegrationException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -80,6 +81,33 @@ public class GlobalExceptionHandler {
                 "Bad Request",
                 ex.getMessage(),
                 null,
+                OffsetDateTime.now(ZoneOffset.UTC)
+        );
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+
+    /**
+     * Handler para erros de parsing do corpo da requisição.
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleHttpMessageNotReadable(HttpMessageNotReadableException ex, HttpServletRequest request) {
+        String traceId = generateTraceId();
+
+        log.warn("⚠️ [{}] HttpMessageNotReadableException: {}", traceId, ex.getMessage());
+
+        String message = "Formato inválido para o corpo da requisição.";
+        String details = ex.getMessage();
+        if (details != null && details.contains("dueDate")) {
+            message = "Formato inválido para dueDate. Use yyyy-MM-dd.";
+        }
+
+        ErrorResponse response = new ErrorResponse(
+                traceId,
+                HttpStatus.BAD_REQUEST.value(),
+                "Bad Request",
+                message,
+                request != null ? request.getRequestURI() : null,
                 OffsetDateTime.now(ZoneOffset.UTC)
         );
 
