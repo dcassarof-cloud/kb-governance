@@ -1,6 +1,7 @@
 package br.com.consisa.gov.kb.controller.api.dto;
 
 import java.util.List;
+import java.util.Map;
 
 public record GovernanceSummaryResponse(
         long totalArticles,
@@ -8,6 +9,7 @@ public record GovernanceSummaryResponse(
         long articlesWithIssues,
         long articlesOk,
         long totalOpenIssues,
+        Map<String, Long> issuesByType,
         List<RiskSummary> manualsByRisk,
         List<SlaSummary> slaOverdueByPriority,
         double iaReadyPercent,
