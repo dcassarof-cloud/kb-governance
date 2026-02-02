@@ -4,6 +4,8 @@ import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueAssignmentRespons
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueAssignRequest;
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueHistoryResponse;
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueResponse;
+import br.com.consisa.gov.kb.controller.api.dto.ResponsibleSummaryDto;
+import br.com.consisa.gov.kb.controller.api.dto.SuggestedAssigneeResponse;
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueStatusResponse;
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueStatusUpdateRequest;
 import br.com.consisa.gov.kb.controller.api.dto.PaginatedResponse;
@@ -16,11 +18,11 @@ import br.com.consisa.gov.kb.domain.KbGovernanceIssue;
 import br.com.consisa.gov.kb.repository.KbArticleRepository;
 import br.com.consisa.gov.kb.repository.KbGovernanceIssueRepository;
 import br.com.consisa.gov.kb.service.GovernanceService;
+import br.com.consisa.gov.kb.service.GovernanceAssigneeService;
 import br.com.consisa.gov.kb.service.GovernanceIssueWorkflowService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -29,6 +31,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import static br.com.consisa.gov.kb.util.DateTimeUtils.toOffsetDateTime;
+import static br.com.consisa.gov.kb.util.DateTimeUtils.toOffsetDateTimeOrNull;
 
 /**
  * 🔍 Governance API Controller
@@ -48,17 +51,20 @@ public class GovernanceApiController {
     private final KbArticleRepository articleRepo;
     private final GovernanceService governanceService;
     private final GovernanceIssueWorkflowService workflowService;
+    private final GovernanceAssigneeService assigneeService;
 
     public GovernanceApiController(
             KbGovernanceIssueRepository issueRepo,
             KbArticleRepository articleRepo,
             GovernanceService governanceService,
-            GovernanceIssueWorkflowService workflowService
+            GovernanceIssueWorkflowService workflowService,
+            GovernanceAssigneeService assigneeService
     ) {
         this.issueRepo = issueRepo;
         this.articleRepo = articleRepo;
         this.governanceService = governanceService;
         this.workflowService = workflowService;
+        this.assigneeService = assigneeService;
     }
 
     /**
@@ -72,7 +78,7 @@ public class GovernanceApiController {
             @RequestParam(defaultValue = "10") int size
     ) {
         log.info("GET /api/v1/governance (redirecting to /issues)");
-        return getIssues(page, size, null, null, null, null, null);
+        return getIssues(page, size, null, null, null, null, null, null, null);
     }
 
     /**
@@ -96,13 +102,15 @@ public class GovernanceApiController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String type,
+            @RequestParam(required = false, name = "issueType") String issueType,
             @RequestParam(required = false) String severity,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String systemCode,
+            @RequestParam(required = false) String assigned,
             @RequestParam(required = false) String responsible
     ) {
-        log.info("GET /api/v1/governance/issues?page={}&size={}&type={}&status={}&systemCode={}&responsible={}",
-                page, size, type, status, systemCode, responsible);
+        log.info("GET /api/v1/governance/issues?page={}&size={}&type={}&issueType={}&status={}&systemCode={}&assigned={}",
+                page, size, type, issueType, status, systemCode, assigned);
 
         // Converte page de 1-based para 0-based
         int pageIndex = Math.max(0, page - 1);
@@ -111,17 +119,19 @@ public class GovernanceApiController {
 
         // Usa query com filtros se type ou status foram informados
         // Passa null para filtros vazios ou em branco
-        String filterType = (type != null && !type.isBlank()) ? type : null;
+        String rawType = (issueType != null && !issueType.isBlank()) ? issueType : type;
+        String filterType = (rawType != null && !rawType.isBlank()) ? rawType : null;
         String filterSeverity = (severity != null && !severity.isBlank()) ? severity : null;
         String filterStatus = (status != null && !status.isBlank()) ? status : null;
         String filterSystemCode = (systemCode != null && !systemCode.isBlank()) ? systemCode : null;
-        String filterResponsible = (responsible != null && !responsible.isBlank()) ? responsible : null;
+        String rawAssigned = (assigned != null && !assigned.isBlank()) ? assigned : responsible;
+        String filterResponsible = (rawAssigned != null && !rawAssigned.isBlank()) ? rawAssigned : null;
 
         var pageResult = (filterType != null || filterStatus != null || filterSeverity != null || filterSystemCode != null || filterResponsible != null)
                 ? issueRepo.pageIssuesFiltered(pageable, filterType, filterSeverity, filterStatus, filterSystemCode, filterResponsible)
                 : issueRepo.pageIssues(pageable);
 
-        log.info("📊 Total de issues (filtros: type={}, status={}, system={}, responsible={}): {}",
+        log.info("📊 Total de issues (filtros: type={}, status={}, system={}, assigned={}): {}",
                 filterType, filterStatus, filterSystemCode, filterResponsible, pageResult.getTotalElements());
 
         // Mapeia para DTO com tratamento robusto
@@ -253,6 +263,26 @@ public class GovernanceApiController {
         return ResponseEntity.ok(groups);
     }
 
+    /**
+     * GET /api/v1/governance/issues/{id}/suggested-assignee
+     */
+    @GetMapping("/issues/{id}/suggested-assignee")
+    @Transactional(readOnly = true)
+    public ResponseEntity<SuggestedAssigneeResponse> getSuggestedAssignee(@PathVariable Long id) {
+        log.info("GET /api/v1/governance/issues/{}/suggested-assignee", id);
+        return ResponseEntity.ok(assigneeService.suggestAssignee(id));
+    }
+
+    /**
+     * GET /api/v1/governance/responsibles/summary
+     */
+    @GetMapping("/responsibles/summary")
+    @Transactional(readOnly = true)
+    public ResponseEntity<List<ResponsibleSummaryDto>> getResponsiblesSummary() {
+        log.info("GET /api/v1/governance/responsibles/summary");
+        return ResponseEntity.ok(assigneeService.listResponsiblesSummary());
+    }
+
     // ======================
     // MAPPING
     // ======================
@@ -265,6 +295,7 @@ public class GovernanceApiController {
      * Usa DateTimeUtils.toOffsetDateTime() para conversão centralizada.
      */
     private GovernanceIssueResponse mapIssueRowToDto(KbGovernanceIssueRepository.IssueRow row) {
+        String message = row.getMessage();
         return new GovernanceIssueResponse(
                 row.getId(),
                 row.getIssueType() != null ? row.getIssueType() : "UNKNOWN",
@@ -274,8 +305,13 @@ public class GovernanceApiController {
                 row.getArticleTitle(),
                 row.getSystemCode(),
                 row.getSystemName(),
-                row.getMessage(),
-                toOffsetDateTime(row.getCreatedAt())  // Instant → OffsetDateTime (UTC)
+                message,
+                toOffsetDateTime(row.getCreatedAt()),  // Instant → OffsetDateTime (UTC)
+                toOffsetDateTimeOrNull(row.getUpdatedAt()),
+                row.getAssignedAgentId(),
+                row.getAssignedAgentName(),
+                toOffsetDateTimeOrNull(row.getDueDate()),
+                message
         );
     }
 
@@ -315,7 +351,12 @@ public class GovernanceApiController {
                 systemCode,
                 systemName,
                 details,
-                issue.getCreatedAt()
+                issue.getCreatedAt(),
+                issue.getUpdatedAt(),
+                null,
+                null,
+                null,
+                details
         );
     }
 }

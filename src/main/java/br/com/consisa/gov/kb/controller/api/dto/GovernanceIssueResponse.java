@@ -15,8 +15,12 @@ import java.time.OffsetDateTime;
  *   "articleTitle": "Como cadastrar cliente",
  *   "systemCode": "CONSISANET",
  *   "systemName": "ConsisaNET",
- *   "details": "Conteúdo vazio",
- *   "createdAt": "2024-01-19T10:30:00Z"
+ *   "message": "Conteúdo vazio",
+ *   "createdAt": "2024-01-19T10:30:00Z",
+ *   "updatedAt": "2024-01-20T10:30:00Z",
+ *   "assignedAgentId": "123",
+ *   "assignedAgentName": "Maria Silva",
+ *   "dueDate": "2024-02-01T00:00:00Z"
  * }
  */
 public record GovernanceIssueResponse(
@@ -28,7 +32,12 @@ public record GovernanceIssueResponse(
         String articleTitle,
         String systemCode,
         String systemName,
-        String details,
-        OffsetDateTime createdAt
+        String message,
+        OffsetDateTime createdAt,
+        OffsetDateTime updatedAt,
+        String assignedAgentId,
+        String assignedAgentName,
+        OffsetDateTime dueDate,
+        String details
 ) {
 }

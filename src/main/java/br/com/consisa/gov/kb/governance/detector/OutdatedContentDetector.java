@@ -22,7 +22,7 @@ import java.time.temporal.ChronoUnit;
  * - Fallback para created_at se updated_at for nulo
  *
  * CONFIGURAÇÃO:
- * - MAX_DAYS_WITHOUT_UPDATE = 365 dias (1 ano)
+ * - MAX_DAYS_WITHOUT_UPDATE = 180 dias
  * - Pode ser ajustado conforme necessidade do negócio
  */
 @Component
@@ -32,9 +32,9 @@ public class OutdatedContentDetector implements KbGovernanceDetector {
 
     /**
      * Máximo de dias sem atualização antes de considerar desatualizado.
-     * Padrão: 365 dias (1 ano).
+     * Padrão: 180 dias.
      */
-    private static final int MAX_DAYS_WITHOUT_UPDATE = 365;
+    private static final int MAX_DAYS_WITHOUT_UPDATE = 180;
 
     private final KbGovernanceIssueService issueService;
 
@@ -76,14 +76,9 @@ public class OutdatedContentDetector implements KbGovernanceDetector {
         }
 
         // Determina severidade baseada no tempo
-        GovernanceSeverity severity;
-        if (daysSinceUpdate > MAX_DAYS_WITHOUT_UPDATE * 2) {
-            severity = GovernanceSeverity.ERROR;  // Mais de 2 anos
-        } else if (daysSinceUpdate > MAX_DAYS_WITHOUT_UPDATE * 1.5) {
-            severity = GovernanceSeverity.WARN;   // Entre 1.5 e 2 anos
-        } else {
-            severity = GovernanceSeverity.INFO;   // Entre 1 e 1.5 anos
-        }
+        GovernanceSeverity severity = daysSinceUpdate >= MAX_DAYS_WITHOUT_UPDATE * 2L
+                ? GovernanceSeverity.ERROR   // HIGH
+                : GovernanceSeverity.WARN;   // MEDIUM
 
         String msg = String.format(
                 "Conteúdo desatualizado: última atualização há %d dias (limite: %d dias)",
@@ -91,9 +86,9 @@ public class OutdatedContentDetector implements KbGovernanceDetector {
         );
 
         ObjectNode evidence = JsonNodeFactory.instance.objectNode();
-        evidence.put("daysSinceUpdate", daysSinceUpdate);
-        evidence.put("maxDaysAllowed", MAX_DAYS_WITHOUT_UPDATE);
-        evidence.put("lastUpdateDate", lastUpdate.toString());
+        evidence.put("updatedAt", lastUpdate.toString());
+        evidence.put("thresholdDays", MAX_DAYS_WITHOUT_UPDATE);
+        evidence.put("ageDays", daysSinceUpdate);
 
         issueService.open(
                 article.getId(),

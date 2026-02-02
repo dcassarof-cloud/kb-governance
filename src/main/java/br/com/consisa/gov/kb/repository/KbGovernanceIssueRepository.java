@@ -52,9 +52,8 @@ public interface KbGovernanceIssueRepository extends JpaRepository<KbGovernanceI
      * - Só deixa de contar quando TODAS as issues do artigo são RESOLVED
      */
     @Query("SELECT COUNT(DISTINCT i.articleId) FROM KbGovernanceIssue i " +
-           "WHERE i.status IN (br.com.consisa.gov.kb.domain.GovernanceIssueStatus.OPEN, " +
-           "br.com.consisa.gov.kb.domain.GovernanceIssueStatus.ASSIGNED, " +
-           "br.com.consisa.gov.kb.domain.GovernanceIssueStatus.IN_PROGRESS)")
+           "WHERE i.status NOT IN (br.com.consisa.gov.kb.domain.GovernanceIssueStatus.RESOLVED, " +
+           "br.com.consisa.gov.kb.domain.GovernanceIssueStatus.IGNORED)")
     long countDistinctArticlesWithOpenIssues();
 
     /**
@@ -66,9 +65,8 @@ public interface KbGovernanceIssueRepository extends JpaRepository<KbGovernanceI
      * - Só fecha quando status = RESOLVED
      */
     @Query("SELECT COUNT(i) FROM KbGovernanceIssue i " +
-           "WHERE i.status IN (br.com.consisa.gov.kb.domain.GovernanceIssueStatus.OPEN, " +
-           "br.com.consisa.gov.kb.domain.GovernanceIssueStatus.ASSIGNED, " +
-           "br.com.consisa.gov.kb.domain.GovernanceIssueStatus.IN_PROGRESS)")
+           "WHERE i.status NOT IN (br.com.consisa.gov.kb.domain.GovernanceIssueStatus.RESOLVED, " +
+           "br.com.consisa.gov.kb.domain.GovernanceIssueStatus.IGNORED)")
     long countOpenIssues();
 
     @Query("SELECT COUNT(DISTINCT i.articleId) FROM KbGovernanceIssue i")
@@ -94,6 +92,10 @@ public interface KbGovernanceIssueRepository extends JpaRepository<KbGovernanceI
         String getSystemName();
         String getMessage();
         java.time.Instant getCreatedAt();  // PostgreSQL TIMESTAMPTZ → Instant
+        java.time.Instant getUpdatedAt();
+        String getAssignedAgentId();
+        String getAssignedAgentName();
+        java.time.Instant getDueDate();
     }
 
     @Query(value = """
@@ -107,10 +109,21 @@ public interface KbGovernanceIssueRepository extends JpaRepository<KbGovernanceI
           COALESCE(s.code,'UNCLASSIFIED') AS systemCode,
           COALESCE(s.name,'Não classificado') AS systemName,
           i.message           AS message,
-          i.created_at        AS createdAt
+          i.created_at        AS createdAt,
+          i.updated_at        AS updatedAt,
+          last_assign.agent_id AS assignedAgentId,
+          last_assign.agent_name AS assignedAgentName,
+          last_assign.due_date AS dueDate
         FROM kb_governance_issue i
         JOIN kb_article a ON a.id = i.article_id
         LEFT JOIN kb_system s ON s.id = a.system_id
+        LEFT JOIN LATERAL (
+            SELECT ia.agent_id, ia.agent_name, ia.due_date
+            FROM kb_governance_issue_assignment ia
+            WHERE ia.issue_id = i.id
+            ORDER BY ia.created_at DESC
+            LIMIT 1
+        ) last_assign ON true
         WHERE a.article_status = 1
         ORDER BY i.created_at DESC
         """,
@@ -138,7 +151,11 @@ public interface KbGovernanceIssueRepository extends JpaRepository<KbGovernanceI
           COALESCE(s.code,'UNCLASSIFIED') AS systemCode,
           COALESCE(s.name,'Não classificado') AS systemName,
           i.message           AS message,
-          i.created_at        AS createdAt
+          i.created_at        AS createdAt,
+          i.updated_at        AS updatedAt,
+          last_assign.agent_id AS assignedAgentId,
+          last_assign.agent_name AS assignedAgentName,
+          last_assign.due_date AS dueDate
         FROM kb_governance_issue i
         JOIN kb_article a ON a.id = i.article_id
         LEFT JOIN kb_system s ON s.id = a.system_id
@@ -193,6 +210,14 @@ public interface KbGovernanceIssueRepository extends JpaRepository<KbGovernanceI
             @org.springframework.data.repository.query.Param("systemCode") String systemCode,
             @org.springframework.data.repository.query.Param("responsible") String responsible
     );
+
+    interface IssueTypeCountRow {
+        KbGovernanceIssueType getIssueType();
+        Long getTotal();
+    }
+
+    @Query("SELECT i.issueType AS issueType, COUNT(i) AS total FROM KbGovernanceIssue i GROUP BY i.issueType")
+    List<IssueTypeCountRow> countByIssueType();
 
     @Query(value = """
         SELECT i.id

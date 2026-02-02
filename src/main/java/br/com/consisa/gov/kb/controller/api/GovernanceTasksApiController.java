@@ -1,6 +1,7 @@
 package br.com.consisa.gov.kb.controller.api;
 
 import br.com.consisa.gov.kb.controller.api.dto.*;
+import br.com.consisa.gov.kb.domain.KbGovernanceIssueType;
 import br.com.consisa.gov.kb.repository.KbArticleRepository;
 import br.com.consisa.gov.kb.repository.KbGovernanceIssueRepository;
 import br.com.consisa.gov.kb.repository.KbManualTaskRepository;
@@ -11,7 +12,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import static br.com.consisa.gov.kb.util.DateTimeUtils.toOffsetDateTimeOrNull;
@@ -152,9 +155,10 @@ public class GovernanceTasksApiController {
     public ResponseEntity<GovernanceSummaryResponse> getSummary() {
         long totalArticles = articleRepository.count();
         long totalIssues = issueRepository.countTotalIssues();
-        long articlesWithIssues = issueRepository.countDistinctArticlesWithIssues();
-        long articlesOk = Math.max(0, totalArticles - articlesWithIssues);
+        long articlesWithOpenIssues = issueRepository.countDistinctArticlesWithOpenIssues();
+        long articlesOk = Math.max(0, totalArticles - articlesWithOpenIssues);
         long openIssues = issueRepository.countOpenIssues();
+        Map<String, Long> issuesByType = buildIssuesByType();
 
         var riskRows = taskRepository.countByRiskLevel();
         List<GovernanceSummaryResponse.RiskSummary> byRisk = riskRows == null
@@ -190,9 +194,10 @@ public class GovernanceTasksApiController {
         GovernanceSummaryResponse response = new GovernanceSummaryResponse(
                 totalArticles,
                 totalIssues,
-                articlesWithIssues,
+                articlesWithOpenIssues,
                 articlesOk,
                 openIssues,
+                issuesByType,
                 byRisk,
                 slaOverdue,
                 0.0,
@@ -200,6 +205,22 @@ public class GovernanceTasksApiController {
         );
 
         return ResponseEntity.ok(response);
+    }
+
+    private Map<String, Long> buildIssuesByType() {
+        Map<String, Long> counts = new LinkedHashMap<>();
+        for (KbGovernanceIssueType type : KbGovernanceIssueType.values()) {
+            counts.put(type.name(), 0L);
+        }
+        var rows = issueRepository.countByIssueType();
+        if (rows != null) {
+            rows.forEach(row -> {
+                if (row.getIssueType() != null) {
+                    counts.put(row.getIssueType().name(), row.getTotal() != null ? row.getTotal() : 0L);
+                }
+            });
+        }
+        return counts;
     }
 
     private GovernanceTaskResponse mapRow(KbManualTaskRepository.ManualTaskRow row) {
