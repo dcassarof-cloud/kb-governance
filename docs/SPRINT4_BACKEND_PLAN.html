@@ -1,0 +1,1415 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sprint 4 Backend - Plano Tecnico</title>
+    <style>
+        @page {
+            margin: 2cm;
+            size: A4;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #fff;
+        }
+        h1 {
+            color: #1a5276;
+            border-bottom: 3px solid #1a5276;
+            padding-bottom: 10px;
+            page-break-after: avoid;
+        }
+        h2 {
+            color: #2874a6;
+            border-bottom: 2px solid #2874a6;
+            padding-bottom: 5px;
+            margin-top: 30px;
+            page-break-after: avoid;
+        }
+        h3 {
+            color: #3498db;
+            margin-top: 20px;
+            page-break-after: avoid;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            font-size: 0.9em;
+            page-break-inside: avoid;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background-color: #2874a6;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-size: 0.85em;
+            page-break-inside: avoid;
+        }
+        .header-info {
+            background: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .section {
+            margin-bottom: 30px;
+        }
+        .alert {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 10px 15px;
+            margin: 15px 0;
+        }
+        .success {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 10px 15px;
+            margin: 15px 0;
+        }
+        ul, ol {
+            margin: 10px 0;
+            padding-left: 25px;
+        }
+        li {
+            margin: 5px 0;
+        }
+        .checklist {
+            list-style: none;
+            padding-left: 0;
+        }
+        .checklist li::before {
+            content: "[ ] ";
+            font-family: monospace;
+        }
+        .page-break {
+            page-break-before: always;
+        }
+        @media print {
+            body {
+                font-size: 11pt;
+            }
+            pre {
+                font-size: 9pt;
+            }
+            table {
+                font-size: 10pt;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<h1>SPRINT 4 BACKEND - PLANO TECNICO</h1>
+<h2>Consisa KB Governance: Ferramenta de Decisao Executiva</h2>
+
+<div class="header-info">
+    <strong>Data:</strong> 02/02/2026<br>
+    <strong>Projeto:</strong> KB Governance (Java 21 + Spring Boot + PostgreSQL + Flyway)<br>
+    <strong>Escopo:</strong> Backend apenas
+</div>
+
+<hr>
+
+<div class="section">
+<h1>A) DIAGNOSTICO DO ESTADO ATUAL</h1>
+
+<h2>TAREFA 1.1 - Endpoints Existentes Relacionados</h2>
+
+<table>
+    <tr>
+        <th>Controller</th>
+        <th>Endpoint</th>
+        <th>Proposito</th>
+    </tr>
+    <tr>
+        <td>GovernanceApiController</td>
+        <td>GET /api/v1/governance/issues</td>
+        <td>Lista issues paginada com filtros basicos</td>
+    </tr>
+    <tr>
+        <td>GovernanceApiController</td>
+        <td>PATCH /api/v1/governance/issues/{id}/status</td>
+        <td>Atualiza status</td>
+    </tr>
+    <tr>
+        <td>GovernanceApiController</td>
+        <td>POST /api/v1/governance/issues/{id}/assign</td>
+        <td>Atribui responsavel</td>
+    </tr>
+    <tr>
+        <td>GovernanceApiController</td>
+        <td>GET /api/v1/governance/issues/{id}/history</td>
+        <td>Historico de auditoria</td>
+    </tr>
+    <tr>
+        <td>DashboardApiController</td>
+        <td>GET /api/v1/dashboard/summary</td>
+        <td>Metricas agregadas basicas</td>
+    </tr>
+    <tr>
+        <td>KbAssignmentController</td>
+        <td>GET /kb/assignments/statistics</td>
+        <td>Stats de assignments de artigos</td>
+    </tr>
+    <tr>
+        <td>KbAssignmentController</td>
+        <td>GET /kb/assignments/overdue</td>
+        <td>Atribuicoes atrasadas</td>
+    </tr>
+</table>
+
+<h2>TAREFA 1.2 - Fraquezas para o Gestor</h2>
+
+<table>
+    <tr>
+        <th>Problema</th>
+        <th>Impacto Executivo</th>
+    </tr>
+    <tr>
+        <td><strong>Sem PRIORIDADE nas issues</strong></td>
+        <td>Gestor nao sabe o que atacar primeiro</td>
+    </tr>
+    <tr>
+        <td><strong>Sem SLA/Due Date nas issues</strong></td>
+        <td>Nao ha como identificar issues atrasadas</td>
+    </tr>
+    <tr>
+        <td><strong>Dashboard summary muito generico</strong></td>
+        <td>Sem breakdown por prioridade, overdue, sem responsavel</td>
+    </tr>
+    <tr>
+        <td><strong>Sem filtro "unassigned"</strong></td>
+        <td>Nao consegue ver issues sem responsavel</td>
+    </tr>
+    <tr>
+        <td><strong>Sem filtro "overdue"</strong></td>
+        <td>Nao ha como listar issues que passaram do SLA</td>
+    </tr>
+    <tr>
+        <td><strong>Resolucao sem comentario</strong></td>
+        <td>Ao resolver, nao ha campo para comentario explicativo</td>
+    </tr>
+    <tr>
+        <td><strong>Visao por sistema inexistente</strong></td>
+        <td>Endpoint /systems/summary nao existe</td>
+    </tr>
+    <tr>
+        <td><strong>Ordenacao padrao nao executiva</strong></td>
+        <td>Listagem nao prioriza por urgencia+vencimento</td>
+    </tr>
+</table>
+
+<h2>TAREFA 1.3 - Fraquezas Tecnicas</h2>
+
+<table>
+    <tr>
+        <th>Problema</th>
+        <th>Localizacao</th>
+        <th>Impacto</th>
+    </tr>
+    <tr>
+        <td>N+1 potencial em listagem</td>
+        <td>Repository</td>
+        <td>Performance degrada com volume</td>
+    </tr>
+    <tr>
+        <td>Sem indice em priority</td>
+        <td>kb_governance_issue</td>
+        <td>Impossivel ordenar/filtrar</td>
+    </tr>
+    <tr>
+        <td>Sem indice em sla_due_at</td>
+        <td>Campo nao existe</td>
+        <td>Impossivel calcular overdue</td>
+    </tr>
+    <tr>
+        <td>Contagens em memoria</td>
+        <td>countByStatus separados</td>
+        <td>Multiple roundtrips</td>
+    </tr>
+    <tr>
+        <td>DTO inconsistente</td>
+        <td>IssueRow</td>
+        <td>Frontend nao recebe priority/sla</td>
+    </tr>
+    <tr>
+        <td>Sem validacao de transicao</td>
+        <td>updateStatus</td>
+        <td>Permite RESOLVED-&gt;OPEN</td>
+    </tr>
+    <tr>
+        <td>Error handling generico</td>
+        <td>GlobalExceptionHandler</td>
+        <td>LGPD/seguranca</td>
+    </tr>
+</table>
+</div>
+
+<div class="page-break"></div>
+
+<div class="section">
+<h1>B) MODELO DE DOMINIO DO SPRINT 4</h1>
+
+<h2>TAREFA 2.1 - PRIORIDADE (Enum GovernanceIssuePriority)</h2>
+
+<table>
+    <tr>
+        <th>Valor</th>
+        <th>Peso</th>
+        <th>Criterio</th>
+        <th>SLA Default</th>
+    </tr>
+    <tr>
+        <td>CRITICAL</td>
+        <td>1</td>
+        <td>Sistema em producao afetado</td>
+        <td>24h</td>
+    </tr>
+    <tr>
+        <td>HIGH</td>
+        <td>2</td>
+        <td>Problema grave mas sem impacto imediato</td>
+        <td>72h (3 dias)</td>
+    </tr>
+    <tr>
+        <td>MEDIUM</td>
+        <td>3</td>
+        <td>Melhoria importante</td>
+        <td>168h (7 dias)</td>
+    </tr>
+    <tr>
+        <td>LOW</td>
+        <td>4</td>
+        <td>Cosmetico ou futuro</td>
+        <td>336h (14 dias)</td>
+    </tr>
+</table>
+
+<div class="alert">
+    <strong>Justificativa:</strong> 4 niveis e suficiente para triagem executiva. Pesos numericos facilitam ordenacao SQL.
+</div>
+
+<h2>TAREFA 2.2 - SLA (Campo sla_due_at)</h2>
+
+<table>
+    <tr>
+        <th>Decisao</th>
+        <th>Justificativa</th>
+    </tr>
+    <tr>
+        <td>Armazenar em kb_governance_issue</td>
+        <td>Permite queries diretas sem joins</td>
+    </tr>
+    <tr>
+        <td>Tipo: TIMESTAMPTZ</td>
+        <td>Consistencia com datas existentes</td>
+    </tr>
+    <tr>
+        <td>Calculado na criacao</td>
+        <td>created_at + SLA_DEFAULT[priority]</td>
+    </tr>
+    <tr>
+        <td>Editavel manualmente</td>
+        <td>Gestor pode ajustar prazo</td>
+    </tr>
+    <tr>
+        <td>NULL = sem SLA</td>
+        <td>Issues antigas sem prioridade</td>
+    </tr>
+</table>
+
+<h2>TAREFA 2.3 - "Sem Responsavel" (Identificacao)</h2>
+
+<p><strong>Estrategia:</strong> Usar LEFT JOIN com kb_governance_issue_assignment</p>
+
+<pre>
+Issue e "sem responsavel" quando:
+- NOT EXISTS assignment para issue_id com status IN ('OPEN', 'IN_PROGRESS')
+- OU assignment existe mas status = 'CANCELLED' ou 'CLOSED'
+</pre>
+
+<div class="success">
+    <strong>Justificativa:</strong> Reutiliza kb_governance_issue_assignment existente. Nao duplica dados.
+</div>
+
+<h2>TAREFA 2.4 - Overdue (Calculo)</h2>
+
+<pre>
+Issue e "overdue" quando:
+- sla_due_at IS NOT NULL
+- sla_due_at &lt; NOW()
+- status NOT IN ('RESOLVED', 'IGNORED')
+</pre>
+
+<h2>TAREFA 2.5 - Resolucao com Comentario</h2>
+
+<table>
+    <tr>
+        <th>Campo</th>
+        <th>Tabela</th>
+        <th>Tipo</th>
+    </tr>
+    <tr>
+        <td>resolution_comment</td>
+        <td>kb_governance_issue</td>
+        <td>TEXT NULL</td>
+    </tr>
+    <tr>
+        <td>resolved_at</td>
+        <td>Ja existe</td>
+        <td>TIMESTAMPTZ</td>
+    </tr>
+    <tr>
+        <td>resolved_by</td>
+        <td>Ja existe</td>
+        <td>VARCHAR(100)</td>
+    </tr>
+</table>
+
+<p><strong>Regra:</strong> Ao mudar status para RESOLVED ou IGNORED, resolution_comment e obrigatorio.</p>
+
+<h2>TAREFA 2.6 - Auditoria</h2>
+
+<p><strong>Tabela existente:</strong> kb_governance_issue_history</p>
+
+<table>
+    <tr>
+        <th>Campo</th>
+        <th>Uso</th>
+    </tr>
+    <tr>
+        <td>action</td>
+        <td>STATUS_CHANGE, PRIORITY_CHANGE, SLA_CHANGE, ASSIGNMENT, RESOLUTION</td>
+    </tr>
+    <tr>
+        <td>old_value</td>
+        <td>JSON com estado anterior</td>
+    </tr>
+    <tr>
+        <td>new_value</td>
+        <td>JSON com estado novo</td>
+    </tr>
+    <tr>
+        <td>actor</td>
+        <td>Quem fez a acao (obrigatorio)</td>
+    </tr>
+</table>
+
+<h2>TAREFA 2.7 - Assignment Separado vs Campo na Issue</h2>
+
+<table>
+    <tr>
+        <th>Aspecto</th>
+        <th>Assignment Separado</th>
+        <th>Campo na Issue</th>
+    </tr>
+    <tr>
+        <td>Historico de atribuicoes</td>
+        <td>Multiplas</td>
+        <td>So ultima</td>
+    </tr>
+    <tr>
+        <td>Queries de listagem</td>
+        <td>Requer JOIN</td>
+        <td>Direto</td>
+    </tr>
+    <tr>
+        <td>Modelo existente</td>
+        <td>Ja existe</td>
+        <td>Mudanca de modelo</td>
+    </tr>
+    <tr>
+        <td>Flexibilidade</td>
+        <td>Pode ter dueDate proprio</td>
+        <td>Limitado</td>
+    </tr>
+</table>
+
+<div class="success">
+    <strong>Decisao:</strong> Manter kb_governance_issue_assignment separado.
+</div>
+</div>
+
+<div class="page-break"></div>
+
+<div class="section">
+<h1>C) PLANO SPRINT 4 BACKEND (PASSOS)</h1>
+
+<h2>Fase 1: Migrations e Modelo</h2>
+<ol>
+    <li>Criar migration V11 - adicionar campos em kb_governance_issue</li>
+    <li>Criar indices para performance</li>
+    <li>Backfill de priority e sla_due_at em dados existentes</li>
+    <li>Atualizar entity KbGovernanceIssue</li>
+    <li>Criar enum GovernanceIssuePriority</li>
+</ol>
+
+<h2>Fase 2: Queries Agregadas</h2>
+<ol start="6">
+    <li>Criar queries nativas para overview</li>
+    <li>Criar queries para systems summary</li>
+    <li>Otimizar query de listagem com novos filtros</li>
+</ol>
+
+<h2>Fase 3: DTOs e Contratos</h2>
+<ol start="9">
+    <li>Criar DTOs para overview</li>
+    <li>Criar DTOs para systems summary</li>
+    <li>Atualizar DTO de issue com priority/sla</li>
+    <li>Criar DTOs para acoes (resolve, assign)</li>
+</ol>
+
+<h2>Fase 4: Endpoints</h2>
+<ol start="13">
+    <li>GET /api/v1/governance/overview</li>
+    <li>GET /api/v1/governance/systems/summary</li>
+    <li>Atualizar GET /api/v1/governance/issues com novos filtros</li>
+    <li>PATCH /api/v1/governance/issues/{id}/resolve</li>
+    <li>Atualizar POST /api/v1/governance/issues/{id}/assignments</li>
+    <li>Atualizar PATCH /api/v1/governance/issues/{id}/status</li>
+</ol>
+
+<h2>Fase 5: Validacoes e Auditoria</h2>
+<ol start="19">
+    <li>Validar transicoes de status</li>
+    <li>Garantir registro em history</li>
+    <li>Adicionar logs estruturados</li>
+</ol>
+
+<h2>Fase 6: Testes</h2>
+<ol start="22">
+    <li>Testes unitarios dos services</li>
+    <li>Testes de integracao dos endpoints</li>
+    <li>Testes de migrations</li>
+</ol>
+</div>
+
+<div class="page-break"></div>
+
+<div class="section">
+<h1>D) LISTA DE MUDANCAS POR ARQUIVOS</h1>
+
+<h2>Novos Arquivos</h2>
+
+<table>
+    <tr>
+        <th>Path</th>
+        <th>Descricao</th>
+    </tr>
+    <tr>
+        <td>src/main/resources/db/migration/V11__governance_sprint4_priority_sla.sql</td>
+        <td>Migration</td>
+    </tr>
+    <tr>
+        <td>src/main/java/.../domain/GovernanceIssuePriority.java</td>
+        <td>Enum de prioridade</td>
+    </tr>
+    <tr>
+        <td>src/main/java/.../controller/api/dto/GovernanceOverviewResponse.java</td>
+        <td>DTO overview</td>
+    </tr>
+    <tr>
+        <td>src/main/java/.../controller/api/dto/SystemsSummaryResponse.java</td>
+        <td>DTO sistemas</td>
+    </tr>
+    <tr>
+        <td>src/main/java/.../controller/api/dto/ResolveIssueRequest.java</td>
+        <td>Request resolver</td>
+    </tr>
+    <tr>
+        <td>src/main/java/.../controller/api/dto/UpdatePriorityRequest.java</td>
+        <td>Request prioridade</td>
+    </tr>
+</table>
+
+<h2>Arquivos Alterados</h2>
+
+<table>
+    <tr>
+        <th>Path</th>
+        <th>Alteracao</th>
+    </tr>
+    <tr>
+        <td>.../domain/KbGovernanceIssue.java</td>
+        <td>+priority, +slaDueAt, +resolutionComment</td>
+    </tr>
+    <tr>
+        <td>.../repository/KbGovernanceIssueRepository.java</td>
+        <td>+queries agregadas, +filtros</td>
+    </tr>
+    <tr>
+        <td>.../service/GovernanceService.java</td>
+        <td>+getOverview(), +getSystemsSummary()</td>
+    </tr>
+    <tr>
+        <td>.../service/GovernanceIssueWorkflowService.java</td>
+        <td>+resolveIssue(), validacoes</td>
+    </tr>
+    <tr>
+        <td>.../controller/api/GovernanceApiController.java</td>
+        <td>+endpoints, +filtros</td>
+    </tr>
+    <tr>
+        <td>.../controller/api/dto/IssueResponse.java</td>
+        <td>+priority, +slaDueAt, +isOverdue</td>
+    </tr>
+    <tr>
+        <td>.../controller/api/dto/IssueListRequest.java</td>
+        <td>+overdueOnly, +unassignedOnly</td>
+    </tr>
+</table>
+
+<h2>Arquivos de Teste (Novos)</h2>
+
+<table>
+    <tr>
+        <th>Path</th>
+    </tr>
+    <tr>
+        <td>src/test/java/.../service/GovernanceOverviewServiceTest.java</td>
+    </tr>
+    <tr>
+        <td>src/test/java/.../controller/GovernanceApiControllerIntegrationTest.java</td>
+    </tr>
+    <tr>
+        <td>src/test/java/.../repository/GovernanceIssueRepositoryTest.java</td>
+    </tr>
+</table>
+</div>
+
+<div class="page-break"></div>
+
+<div class="section">
+<h1>E) CONTRATOS JSON</h1>
+
+<h2>E.1 GET /api/v1/governance/overview</h2>
+
+<p><strong>Proposito:</strong> Metricas agregadas para visao executiva</p>
+
+<p><strong>Response 200:</strong></p>
+<pre>
+{
+  "generatedAt": "2026-02-02T14:30:00Z",
+  "totals": {
+    "issues": 245,
+    "open": 180,
+    "assigned": 45,
+    "inProgress": 12,
+    "resolved": 8,
+    "ignored": 0
+  },
+  "byPriority": {
+    "critical": 5,
+    "high": 23,
+    "medium": 87,
+    "low": 65,
+    "unset": 65
+  },
+  "alerts": {
+    "overdue": 12,
+    "overduePercentage": 6.7,
+    "unassigned": 135,
+    "unassignedPercentage": 75.0,
+    "dueSoon": 8
+  },
+  "trend": {
+    "newLast7Days": 34,
+    "resolvedLast7Days": 22,
+    "netChange": 12
+  }
+}
+</pre>
+
+<h2>E.2 GET /api/v1/governance/systems/summary</h2>
+
+<p><strong>Proposito:</strong> Saude por sistema/produto</p>
+
+<p><strong>Response 200:</strong></p>
+<pre>
+{
+  "generatedAt": "2026-02-02T14:30:00Z",
+  "systems": [
+    {
+      "code": "BIOJOB",
+      "name": "BioJob",
+      "totals": {
+        "issues": 45,
+        "open": 30,
+        "overdue": 3,
+        "unassigned": 25
+      },
+      "byPriority": {
+        "critical": 1,
+        "high": 5,
+        "medium": 20,
+        "low": 19
+      },
+      "healthScore": 67.5,
+      "articlesCount": 120
+    }
+  ],
+  "summary": {
+    "totalSystems": 5,
+    "systemsWithCritical": 2,
+    "worstSystem": "NOTAON"
+  }
+}
+</pre>
+
+<h2>E.3 GET /api/v1/governance/issues</h2>
+
+<p><strong>Query Params:</strong></p>
+
+<table>
+    <tr>
+        <th>Param</th>
+        <th>Tipo</th>
+        <th>Default</th>
+        <th>Descricao</th>
+    </tr>
+    <tr>
+        <td>page</td>
+        <td>int</td>
+        <td>0</td>
+        <td>Pagina (0-indexed)</td>
+    </tr>
+    <tr>
+        <td>size</td>
+        <td>int</td>
+        <td>20</td>
+        <td>Itens por pagina (max 100)</td>
+    </tr>
+    <tr>
+        <td>systemCode</td>
+        <td>string</td>
+        <td>null</td>
+        <td>Filtrar por sistema</td>
+    </tr>
+    <tr>
+        <td>status</td>
+        <td>string</td>
+        <td>null</td>
+        <td>Filtrar por status</td>
+    </tr>
+    <tr>
+        <td>priority</td>
+        <td>string</td>
+        <td>null</td>
+        <td>Filtrar por prioridade</td>
+    </tr>
+    <tr>
+        <td>type</td>
+        <td>string</td>
+        <td>null</td>
+        <td>Filtrar por tipo</td>
+    </tr>
+    <tr>
+        <td>overdueOnly</td>
+        <td>boolean</td>
+        <td>false</td>
+        <td>Apenas issues atrasadas</td>
+    </tr>
+    <tr>
+        <td>unassignedOnly</td>
+        <td>boolean</td>
+        <td>false</td>
+        <td>Apenas sem responsavel</td>
+    </tr>
+    <tr>
+        <td>sort</td>
+        <td>string</td>
+        <td>"executive"</td>
+        <td>Ordenacao</td>
+    </tr>
+</table>
+
+<p><strong>Ordenacao padrao "executive":</strong></p>
+<pre>
+ORDER BY
+  CASE WHEN sla_due_at &lt; NOW() THEN 0 ELSE 1 END,
+  CASE priority WHEN 'CRITICAL' THEN 1 WHEN 'HIGH' THEN 2
+       WHEN 'MEDIUM' THEN 3 WHEN 'LOW' THEN 4 ELSE 5 END,
+  sla_due_at ASC NULLS LAST,
+  created_at ASC
+</pre>
+
+<p><strong>Response 200:</strong></p>
+<pre>
+{
+  "content": [
+    {
+      "id": 1234,
+      "articleId": 5678,
+      "articleTitle": "Como configurar backup no BioJob",
+      "systemCode": "BIOJOB",
+      "systemName": "BioJob",
+      "issueType": "OUTDATED_CONTENT",
+      "severity": "WARN",
+      "status": "OPEN",
+      "priority": "HIGH",
+      "message": "Artigo nao atualizado ha mais de 180 dias",
+      "slaDueAt": "2026-02-03T18:00:00Z",
+      "isOverdue": false,
+      "daysUntilDue": 1,
+      "assignment": {
+        "agentId": "agent-123",
+        "agentName": "Joao Silva",
+        "assignedAt": "2026-01-28T10:00:00Z",
+        "dueDate": "2026-02-03T18:00:00Z"
+      },
+      "createdAt": "2026-01-25T14:30:00Z",
+      "updatedAt": "2026-01-28T10:00:00Z"
+    }
+  ],
+  "page": 0,
+  "size": 20,
+  "totalElements": 180,
+  "totalPages": 9
+}
+</pre>
+
+<h2>E.4 PATCH /api/v1/governance/issues/{id}/status</h2>
+
+<p><strong>Request Body:</strong></p>
+<pre>
+{
+  "status": "IN_PROGRESS",
+  "actor": "maria.souza@consisa.com.br"
+}
+</pre>
+
+<p><strong>Transicoes Validas:</strong></p>
+<ul>
+    <li>OPEN &rarr; ASSIGNED, IN_PROGRESS, IGNORED</li>
+    <li>ASSIGNED &rarr; IN_PROGRESS, OPEN, IGNORED</li>
+    <li>IN_PROGRESS &rarr; RESOLVED (via /resolve), IGNORED, ASSIGNED</li>
+    <li>RESOLVED &rarr; OPEN (reabrir)</li>
+    <li>IGNORED &rarr; OPEN (reabrir)</li>
+</ul>
+
+<p><strong>Response 200:</strong></p>
+<pre>
+{
+  "id": 1234,
+  "previousStatus": "OPEN",
+  "newStatus": "IN_PROGRESS",
+  "updatedAt": "2026-02-02T14:30:00Z",
+  "actor": "maria.souza@consisa.com.br"
+}
+</pre>
+
+<p><strong>Erro 400:</strong></p>
+<pre>
+{
+  "error": "INVALID_TRANSITION",
+  "message": "Cannot transition from RESOLVED to IN_PROGRESS",
+  "currentStatus": "RESOLVED",
+  "requestedStatus": "IN_PROGRESS"
+}
+</pre>
+
+<h2>E.5 PATCH /api/v1/governance/issues/{id}/resolve</h2>
+
+<p><strong>Request Body:</strong></p>
+<pre>
+{
+  "resolution": "RESOLVED",
+  "comment": "Artigo atualizado com nova documentacao do modulo fiscal.",
+  "actor": "joao.silva@consisa.com.br"
+}
+</pre>
+
+<table>
+    <tr>
+        <th>Campo</th>
+        <th>Obrigatorio</th>
+        <th>Validacao</th>
+    </tr>
+    <tr>
+        <td>resolution</td>
+        <td>Sim</td>
+        <td>RESOLVED ou IGNORED</td>
+    </tr>
+    <tr>
+        <td>comment</td>
+        <td>Sim</td>
+        <td>Min 10 chars, max 2000</td>
+    </tr>
+    <tr>
+        <td>actor</td>
+        <td>Sim</td>
+        <td>Email valido</td>
+    </tr>
+</table>
+
+<p><strong>Response 200:</strong></p>
+<pre>
+{
+  "id": 1234,
+  "status": "RESOLVED",
+  "resolutionComment": "Artigo atualizado com nova documentacao...",
+  "resolvedAt": "2026-02-02T14:30:00Z",
+  "resolvedBy": "joao.silva@consisa.com.br"
+}
+</pre>
+
+<h2>E.6 POST /api/v1/governance/issues/{id}/assignments</h2>
+
+<p><strong>Request Body:</strong></p>
+<pre>
+{
+  "agentId": "agent-456",
+  "dueDate": "2026-02-05T18:00:00Z",
+  "actor": "gestor@consisa.com.br",
+  "note": "Prioridade por solicitacao do cliente ABC"
+}
+</pre>
+
+<p><strong>Response 201:</strong></p>
+<pre>
+{
+  "id": 789,
+  "issueId": 1234,
+  "agent": {
+    "id": "agent-456",
+    "name": "Carlos Mendes",
+    "email": "carlos.mendes@consisa.com.br"
+  },
+  "assignedAt": "2026-02-02T14:30:00Z",
+  "dueDate": "2026-02-05T18:00:00Z",
+  "assignedBy": "gestor@consisa.com.br",
+  "previousAssignment": {
+    "agentId": "agent-123",
+    "agentName": "Joao Silva",
+    "cancelledAt": "2026-02-02T14:30:00Z"
+  }
+}
+</pre>
+
+<h2>E.7 PATCH /api/v1/governance/issues/{id}/priority</h2>
+
+<p><strong>Request Body:</strong></p>
+<pre>
+{
+  "priority": "CRITICAL",
+  "recalculateSla": true,
+  "actor": "gestor@consisa.com.br"
+}
+</pre>
+
+<p><strong>Response 200:</strong></p>
+<pre>
+{
+  "id": 1234,
+  "previousPriority": "MEDIUM",
+  "newPriority": "CRITICAL",
+  "previousSlaDueAt": "2026-02-09T18:00:00Z",
+  "newSlaDueAt": "2026-02-03T14:30:00Z",
+  "updatedAt": "2026-02-02T14:30:00Z"
+}
+</pre>
+</div>
+
+<div class="page-break"></div>
+
+<div class="section">
+<h1>F) MIGRATIONS SQL PROPOSTAS</h1>
+
+<h2>V11__governance_sprint4_priority_sla.sql</h2>
+
+<pre>
+-- ============================================
+-- SPRINT 4: Priority, SLA, Resolution Comment
+-- ============================================
+
+-- 1. Adicionar campos em kb_governance_issue
+ALTER TABLE kb_governance_issue
+ADD COLUMN IF NOT EXISTS priority VARCHAR(20) DEFAULT NULL,
+ADD COLUMN IF NOT EXISTS sla_due_at TIMESTAMPTZ DEFAULT NULL,
+ADD COLUMN IF NOT EXISTS resolution_comment TEXT DEFAULT NULL;
+
+-- 2. Constraint para valores de priority
+ALTER TABLE kb_governance_issue
+ADD CONSTRAINT chk_governance_issue_priority
+CHECK (priority IS NULL OR priority IN ('CRITICAL', 'HIGH', 'MEDIUM', 'LOW'));
+
+-- 3. Indices para filtros e ordenacao executiva
+CREATE INDEX IF NOT EXISTS idx_governance_issue_priority
+ON kb_governance_issue(priority)
+WHERE status NOT IN ('RESOLVED', 'IGNORED');
+
+CREATE INDEX IF NOT EXISTS idx_governance_issue_sla_due_at
+ON kb_governance_issue(sla_due_at)
+WHERE status NOT IN ('RESOLVED', 'IGNORED');
+
+CREATE INDEX IF NOT EXISTS idx_governance_issue_status_priority
+ON kb_governance_issue(status, priority, sla_due_at);
+
+-- 4. Indice para agregacao por sistema (via article)
+CREATE INDEX IF NOT EXISTS idx_governance_issue_article_status
+ON kb_governance_issue(article_id, status);
+
+-- 5. Indice para overview agregada
+CREATE INDEX IF NOT EXISTS idx_governance_issue_overview
+ON kb_governance_issue(status, priority, sla_due_at, created_at);
+
+-- 6. Backfill: Definir priority baseado em severity existente
+UPDATE kb_governance_issue
+SET priority = CASE
+    WHEN severity = 'ERROR' THEN 'HIGH'
+    WHEN severity = 'WARN' THEN 'MEDIUM'
+    WHEN severity = 'INFO' THEN 'LOW'
+    ELSE 'MEDIUM'
+END
+WHERE priority IS NULL
+AND status NOT IN ('RESOLVED', 'IGNORED');
+
+-- 7. Backfill: Calcular SLA baseado em priority
+UPDATE kb_governance_issue
+SET sla_due_at = CASE priority
+    WHEN 'CRITICAL' THEN created_at + INTERVAL '24 hours'
+    WHEN 'HIGH' THEN created_at + INTERVAL '72 hours'
+    WHEN 'MEDIUM' THEN created_at + INTERVAL '168 hours'
+    WHEN 'LOW' THEN created_at + INTERVAL '336 hours'
+    ELSE created_at + INTERVAL '168 hours'
+END
+WHERE sla_due_at IS NULL
+AND priority IS NOT NULL
+AND status NOT IN ('RESOLVED', 'IGNORED');
+
+-- 8. Campo para rastrear se SLA foi definido manualmente
+ALTER TABLE kb_governance_issue
+ADD COLUMN IF NOT EXISTS sla_manual BOOLEAN DEFAULT FALSE;
+
+-- 9. Indice composto para query executiva principal
+CREATE INDEX IF NOT EXISTS idx_governance_issue_executive_queue
+ON kb_governance_issue(
+    (CASE WHEN sla_due_at &lt; NOW() THEN 0 ELSE 1 END),
+    priority,
+    sla_due_at,
+    created_at
+)
+WHERE status NOT IN ('RESOLVED', 'IGNORED');
+
+-- 10. Indice para buscar assignments ativos por issue
+CREATE INDEX IF NOT EXISTS idx_governance_issue_assignment_active
+ON kb_governance_issue_assignment(issue_id, status)
+WHERE status IN ('OPEN', 'IN_PROGRESS');
+</pre>
+
+<h2>Impactos em Dados Existentes</h2>
+
+<table>
+    <tr>
+        <th>Aspecto</th>
+        <th>Impacto</th>
+        <th>Mitigacao</th>
+    </tr>
+    <tr>
+        <td>Issues sem priority</td>
+        <td>Backfill baseado em severity</td>
+        <td>Mapeamento conservador</td>
+    </tr>
+    <tr>
+        <td>Issues sem SLA</td>
+        <td>Calculado a partir de created_at</td>
+        <td>Muitas estarao overdue</td>
+    </tr>
+    <tr>
+        <td>Issues RESOLVED/IGNORED</td>
+        <td>Nao alteradas</td>
+        <td>Mantem estado historico</td>
+    </tr>
+    <tr>
+        <td>Novo indice grande</td>
+        <td>Impacto em INSERT/UPDATE</td>
+        <td>Indices parciais (WHERE)</td>
+    </tr>
+</table>
+
+<h2>Rollback Script</h2>
+
+<pre>
+-- Rollback V11 (usar apenas se necessario)
+ALTER TABLE kb_governance_issue
+DROP COLUMN IF EXISTS priority,
+DROP COLUMN IF EXISTS sla_due_at,
+DROP COLUMN IF EXISTS resolution_comment,
+DROP COLUMN IF EXISTS sla_manual;
+
+DROP INDEX IF EXISTS idx_governance_issue_priority;
+DROP INDEX IF EXISTS idx_governance_issue_sla_due_at;
+DROP INDEX IF EXISTS idx_governance_issue_status_priority;
+DROP INDEX IF EXISTS idx_governance_issue_executive_queue;
+</pre>
+</div>
+
+<div class="page-break"></div>
+
+<div class="section">
+<h1>G) QUERIES E PERFORMANCE</h1>
+
+<h2>G.1 Overview Agregada</h2>
+
+<p><strong>Recomendacao:</strong> SQL Nativo com uma unica query usando agregacoes condicionais</p>
+
+<pre>
+SELECT
+    COUNT(*) AS total_issues,
+    COUNT(*) FILTER (WHERE status = 'OPEN') AS open_count,
+    COUNT(*) FILTER (WHERE status = 'ASSIGNED') AS assigned_count,
+    COUNT(*) FILTER (WHERE status = 'IN_PROGRESS') AS in_progress_count,
+    COUNT(*) FILTER (WHERE status = 'RESOLVED') AS resolved_count,
+    COUNT(*) FILTER (WHERE status = 'IGNORED') AS ignored_count,
+
+    COUNT(*) FILTER (WHERE priority = 'CRITICAL'
+                     AND status NOT IN ('RESOLVED', 'IGNORED')) AS critical_count,
+    COUNT(*) FILTER (WHERE priority = 'HIGH'
+                     AND status NOT IN ('RESOLVED', 'IGNORED')) AS high_count,
+    COUNT(*) FILTER (WHERE priority = 'MEDIUM'
+                     AND status NOT IN ('RESOLVED', 'IGNORED')) AS medium_count,
+    COUNT(*) FILTER (WHERE priority = 'LOW'
+                     AND status NOT IN ('RESOLVED', 'IGNORED')) AS low_count,
+
+    COUNT(*) FILTER (WHERE sla_due_at &lt; NOW()
+                     AND status NOT IN ('RESOLVED', 'IGNORED')) AS overdue_count,
+    COUNT(*) FILTER (WHERE sla_due_at BETWEEN NOW() AND NOW() + INTERVAL '48 hours'
+                     AND status NOT IN ('RESOLVED', 'IGNORED')) AS due_soon_count,
+
+    COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days') AS new_last_7_days,
+    COUNT(*) FILTER (WHERE resolved_at >= NOW() - INTERVAL '7 days') AS resolved_last_7_days
+
+FROM kb_governance_issue;
+</pre>
+
+<div class="alert">
+    <strong>Por que SQL Nativo:</strong> FILTER clause e especifica do PostgreSQL, performance muito superior a multiplos COUNT separados.
+</div>
+
+<h2>G.2 Systems Summary</h2>
+
+<pre>
+SELECT
+    s.code AS system_code,
+    s.name AS system_name,
+    COUNT(*) AS total_issues,
+    COUNT(*) FILTER (WHERE gi.status = 'OPEN') AS open_count,
+    COUNT(*) FILTER (WHERE gi.sla_due_at &lt; NOW()
+                     AND gi.status NOT IN ('RESOLVED', 'IGNORED')) AS overdue_count,
+    COUNT(*) FILTER (WHERE gi.priority = 'CRITICAL'
+                     AND gi.status NOT IN ('RESOLVED', 'IGNORED')) AS critical_count,
+    (SELECT COUNT(*) FROM kb_article a2 WHERE a2.system_id = s.id) AS articles_count
+FROM kb_governance_issue gi
+JOIN kb_article a ON a.id = gi.article_id
+JOIN kb_system s ON s.id = a.system_id
+GROUP BY s.id, s.code, s.name
+ORDER BY overdue_count DESC, critical_count DESC;
+</pre>
+
+<h2>G.3 JPQL vs SQL Nativo - Decisao</h2>
+
+<table>
+    <tr>
+        <th>Query</th>
+        <th>Escolha</th>
+        <th>Justificativa</th>
+    </tr>
+    <tr>
+        <td>Overview</td>
+        <td>SQL Nativo</td>
+        <td>FILTER clause</td>
+    </tr>
+    <tr>
+        <td>Systems Summary</td>
+        <td>SQL Nativo</td>
+        <td>GROUP BY complexo</td>
+    </tr>
+    <tr>
+        <td>Issues List</td>
+        <td>SQL Nativo</td>
+        <td>LATERAL join + ordenacao</td>
+    </tr>
+    <tr>
+        <td>History by Issue</td>
+        <td>JPQL</td>
+        <td>Query simples</td>
+    </tr>
+    <tr>
+        <td>Single Issue</td>
+        <td>JPQL</td>
+        <td>findById padrao</td>
+    </tr>
+    <tr>
+        <td>Create/Update</td>
+        <td>JPA</td>
+        <td>Transacional padrao</td>
+    </tr>
+</table>
+</div>
+
+<div class="page-break"></div>
+
+<div class="section">
+<h1>H) CRITERIOS DE ACEITACAO E TESTES</h1>
+
+<h2>Checklist Build/Deploy</h2>
+<ul class="checklist">
+    <li>mvn clean verify passa sem erros</li>
+    <li>Flyway V11 executa em banco novo (do zero)</li>
+    <li>Flyway V11 executa em banco com dados existentes</li>
+    <li>Nenhum warning de deprecation nas entities</li>
+    <li>Application startup sem erros</li>
+</ul>
+
+<h2>Checklist Migrations</h2>
+<ul class="checklist">
+    <li>V11 e idempotente (IF NOT EXISTS)</li>
+    <li>Backfill nao afeta RESOLVED/IGNORED</li>
+    <li>Indices criados corretamente</li>
+    <li>Constraint de priority funciona</li>
+    <li>Rollback script testado</li>
+</ul>
+
+<h2>Checklist Endpoints</h2>
+
+<table>
+    <tr>
+        <th>Endpoint</th>
+        <th>Criterio</th>
+    </tr>
+    <tr>
+        <td>GET /overview</td>
+        <td>Retorna todas as metricas em &lt; 500ms</td>
+    </tr>
+    <tr>
+        <td>GET /overview</td>
+        <td>overdue count bate com filtro overdueOnly=true</td>
+    </tr>
+    <tr>
+        <td>GET /overview</td>
+        <td>unassigned count bate com filtro unassignedOnly=true</td>
+    </tr>
+    <tr>
+        <td>GET /systems/summary</td>
+        <td>Lista todos sistemas com issues</td>
+    </tr>
+    <tr>
+        <td>GET /systems/summary</td>
+        <td>healthScore calculado corretamente</td>
+    </tr>
+    <tr>
+        <td>GET /issues</td>
+        <td>Paginacao funciona (page, size)</td>
+    </tr>
+    <tr>
+        <td>GET /issues</td>
+        <td>Filtro systemCode funciona</td>
+    </tr>
+    <tr>
+        <td>GET /issues</td>
+        <td>Filtro priority funciona</td>
+    </tr>
+    <tr>
+        <td>GET /issues</td>
+        <td>Filtro overdueOnly retorna apenas overdue</td>
+    </tr>
+    <tr>
+        <td>GET /issues</td>
+        <td>Filtro unassignedOnly retorna sem assignment</td>
+    </tr>
+    <tr>
+        <td>GET /issues</td>
+        <td>Ordenacao executiva e default</td>
+    </tr>
+    <tr>
+        <td>GET /issues</td>
+        <td>isOverdue calculado corretamente</td>
+    </tr>
+    <tr>
+        <td>PATCH /status</td>
+        <td>Transicao valida funciona</td>
+    </tr>
+    <tr>
+        <td>PATCH /status</td>
+        <td>Transicao invalida retorna 400</td>
+    </tr>
+    <tr>
+        <td>PATCH /status</td>
+        <td>Registra em history</td>
+    </tr>
+    <tr>
+        <td>PATCH /resolve</td>
+        <td>Comentario obrigatorio</td>
+    </tr>
+    <tr>
+        <td>PATCH /resolve</td>
+        <td>Comentario &lt; 10 chars retorna 400</td>
+    </tr>
+    <tr>
+        <td>PATCH /resolve</td>
+        <td>Define resolved_at e resolved_by</td>
+    </tr>
+    <tr>
+        <td>PATCH /resolve</td>
+        <td>Registra em history</td>
+    </tr>
+    <tr>
+        <td>POST /assignments</td>
+        <td>Cria assignment</td>
+    </tr>
+    <tr>
+        <td>POST /assignments</td>
+        <td>Atualiza status para ASSIGNED</td>
+    </tr>
+    <tr>
+        <td>POST /assignments</td>
+        <td>Cancela assignment anterior se existir</td>
+    </tr>
+    <tr>
+        <td>POST /assignments</td>
+        <td>Registra em history</td>
+    </tr>
+    <tr>
+        <td>POST /assignments</td>
+        <td>Agente inativo retorna 400</td>
+    </tr>
+</table>
+
+<h2>Checklist Auditoria</h2>
+<ul class="checklist">
+    <li>Toda mudanca de status registra history</li>
+    <li>Toda mudanca de priority registra history</li>
+    <li>Toda atribuicao registra history</li>
+    <li>Toda resolucao registra history</li>
+    <li>Actor e obrigatorio em todas acoes</li>
+</ul>
+
+<h2>Checklist Logs e LGPD</h2>
+<ul class="checklist">
+    <li>Logs de actions nao contem dados pessoais</li>
+    <li>Logs contem IDs para rastreabilidade</li>
+    <li>Logs de erro nao expoem stack traces ao cliente</li>
+    <li>Mensagens de erro sao genericas para o cliente</li>
+    <li>Logs internos tem nivel adequado (INFO para actions)</li>
+</ul>
+
+<h2>Testes Unitarios Minimos</h2>
+<pre>
+GovernanceOverviewServiceTest
+  - shouldCalculateOverviewMetrics()
+  - shouldCountOverdueCorrectly()
+  - shouldCountUnassignedCorrectly()
+
+GovernanceIssueWorkflowServiceTest
+  - shouldResolveWithComment()
+  - shouldRejectResolutionWithoutComment()
+  - shouldValidateStatusTransition()
+  - shouldRecordHistory()
+
+GovernanceAssignmentServiceTest
+  - shouldCreateAssignment()
+  - shouldCancelPreviousAssignment()
+  - shouldRejectInactiveAgent()
+</pre>
+
+<h2>Testes de Integracao Minimos</h2>
+<pre>
+GovernanceApiControllerIntegrationTest
+  - testOverviewEndpoint()
+  - testSystemsSummaryEndpoint()
+  - testIssuesListWithFilters()
+  - testResolveIssue()
+  - testAssignIssue()
+
+MigrationIntegrationTest
+  - testV11OnEmptyDatabase()
+  - testV11OnExistingData()
+  - testBackfillPriority()
+  - testBackfillSla()
+</pre>
+</div>
+
+<div class="page-break"></div>
+
+<div class="section">
+<h1>RESUMO EXECUTIVO</h1>
+
+<h2>O que muda</h2>
+<ol>
+    <li><strong>Modelo:</strong> kb_governance_issue ganha priority, sla_due_at, resolution_comment</li>
+    <li><strong>Queries:</strong> Novas queries agregadas com SQL nativo para performance</li>
+    <li><strong>Endpoints:</strong> 3 novos + 3 atualizados</li>
+    <li><strong>Validacoes:</strong> Transicao de status, comentario obrigatorio em resolucao</li>
+    <li><strong>Auditoria:</strong> Novos actions no history</li>
+</ol>
+
+<h2>O que reutiliza</h2>
+<ol>
+    <li>kb_governance_issue_assignment - continua sendo tabela de atribuicoes</li>
+    <li>kb_governance_issue_history - continua sendo tabela de auditoria</li>
+    <li>KbAgent - responsaveis continuam vindo dessa tabela</li>
+    <li>Enums existentes (GovernanceIssueStatus, GovernanceIssueType, GovernanceSeverity)</li>
+</ol>
+
+<h2>Riscos e Mitigacoes</h2>
+
+<table>
+    <tr>
+        <th>Risco</th>
+        <th>Probabilidade</th>
+        <th>Mitigacao</th>
+    </tr>
+    <tr>
+        <td>Backfill marca muitos como overdue</td>
+        <td>Alta</td>
+        <td>Comunicar stakeholders</td>
+    </tr>
+    <tr>
+        <td>Performance em overview</td>
+        <td>Media</td>
+        <td>Indices parciais, cache se necessario</td>
+    </tr>
+    <tr>
+        <td>Migration falha em prod</td>
+        <td>Baixa</td>
+        <td>Testar em staging com dump</td>
+    </tr>
+</table>
+
+<hr>
+
+<p style="text-align: center; margin-top: 40px; color: #666;">
+    <strong>Documento gerado em:</strong> 02/02/2026<br>
+    <strong>Autor:</strong> Claude Code (Arquiteto Backend)<br>
+    <strong>Projeto:</strong> Consisa KB Governance
+</p>
+</div>
+
+</body>
+</html>
