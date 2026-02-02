@@ -2,6 +2,7 @@ package br.com.consisa.gov.kb.service;
 
 import br.com.consisa.gov.kb.client.movidesk.*;
 import br.com.consisa.gov.kb.domain.*;
+import br.com.consisa.gov.kb.exception.IntegrationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -53,9 +54,18 @@ public class MovideskTicketService {
         log.info("🎫 Criando ticket para atribuição: assignmentId={} articleId={}",
                 assignment.getId(), assignment.getArticleId());
 
+        if (assignment.getTicketId() != null && !assignment.getTicketId().isBlank()) {
+            log.info("🎫 Ticket já existente para assignmentId={}, ticketId={}",
+                    assignment.getId(), assignment.getTicketId());
+            MovideskTicketResponse existing = new MovideskTicketResponse();
+            existing.setId(assignment.getTicketId());
+            existing.setStatus("EXISTING");
+            return existing;
+        }
+
         // Validações
         if (defaultClientId == null || defaultClientId.isBlank()) {
-            throw new IllegalStateException(
+            throw new IntegrationException(
                     "movidesk.ticket.client-id não está configurado. " +
                             "Configure no application.properties"
             );
@@ -108,7 +118,7 @@ public class MovideskTicketService {
 
         } catch (Exception e) {
             log.error("❌ Erro ao criar ticket no Movidesk: {}", e.getMessage(), e);
-            throw new RuntimeException("Falha ao criar ticket: " + e.getMessage(), e);
+            throw new IntegrationException("Falha ao criar ticket no Movidesk.", e);
         }
     }
 

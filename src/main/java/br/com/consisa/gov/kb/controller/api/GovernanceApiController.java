@@ -1,6 +1,5 @@
 package br.com.consisa.gov.kb.controller.api;
 
-import br.com.consisa.gov.kb.controller.api.dto.DuplicateGroupResponse;
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueAssignmentResponse;
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueAssignRequest;
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueHistoryResponse;
@@ -8,6 +7,7 @@ import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueResponse;
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueStatusResponse;
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueStatusUpdateRequest;
 import br.com.consisa.gov.kb.controller.api.dto.PaginatedResponse;
+import br.com.consisa.gov.kb.dto.DuplicateGroupDto;
 import br.com.consisa.gov.kb.dto.GovernanceManualDto;
 import br.com.consisa.gov.kb.dto.PageResponseDto;
 import br.com.consisa.gov.kb.domain.GovernanceIssueStatus;
@@ -25,7 +25,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -244,32 +243,10 @@ public class GovernanceApiController {
      */
     @GetMapping("/duplicates")
     @Transactional(readOnly = true)
-    public ResponseEntity<List<DuplicateGroupResponse>> getDuplicates() {
+    public ResponseEntity<List<DuplicateGroupDto>> getDuplicates() {
         log.info("GET /api/v1/governance/duplicates");
 
-        // 1. Busca hashes duplicados (com proteção contra null)
-        List<String> duplicateHashes = articleRepo.findDuplicateContentHashes();
-        if (duplicateHashes == null || duplicateHashes.isEmpty()) {
-            log.info("✅ Nenhum grupo de duplicados encontrado");
-            return ResponseEntity.ok(List.of());
-        }
-
-        // 2. Para cada hash, busca os artigos
-        List<DuplicateGroupResponse> groups = new ArrayList<>();
-
-        for (String hash : duplicateHashes) {
-            if (hash == null || hash.isBlank()) continue;
-
-            List<Long> articleIds = articleRepo.findArticleIdsByContentHash(hash);
-
-            if (articleIds != null && articleIds.size() > 1) {
-                groups.add(new DuplicateGroupResponse(
-                        hash,
-                        articleIds.size(),
-                        articleIds
-                ));
-            }
-        }
+        List<DuplicateGroupDto> groups = governanceService.listDuplicates();
 
         log.info("✅ Retornando {} grupos de duplicados", groups.size());
 

@@ -1,6 +1,7 @@
 package br.com.consisa.gov.kb.controller.api;
 
 import br.com.consisa.gov.kb.controller.api.dto.*;
+import br.com.consisa.gov.kb.repository.KbArticleRepository;
 import br.com.consisa.gov.kb.repository.KbGovernanceIssueRepository;
 import br.com.consisa.gov.kb.repository.KbManualTaskRepository;
 import br.com.consisa.gov.kb.service.KbManualTaskService;
@@ -23,15 +24,18 @@ public class GovernanceTasksApiController {
     private final KbManualTaskService taskService;
     private final KbManualTaskRepository taskRepository;
     private final KbGovernanceIssueRepository issueRepository;
+    private final KbArticleRepository articleRepository;
 
     public GovernanceTasksApiController(
             KbManualTaskService taskService,
             KbManualTaskRepository taskRepository,
-            KbGovernanceIssueRepository issueRepository
+            KbGovernanceIssueRepository issueRepository,
+            KbArticleRepository articleRepository
     ) {
         this.taskService = taskService;
         this.taskRepository = taskRepository;
         this.issueRepository = issueRepository;
+        this.articleRepository = articleRepository;
     }
 
     /**
@@ -146,6 +150,10 @@ public class GovernanceTasksApiController {
     @GetMapping("/summary")
     @Transactional(readOnly = true)
     public ResponseEntity<GovernanceSummaryResponse> getSummary() {
+        long totalArticles = articleRepository.count();
+        long totalIssues = issueRepository.countTotalIssues();
+        long articlesWithIssues = issueRepository.countDistinctArticlesWithIssues();
+        long articlesOk = Math.max(0, totalArticles - articlesWithIssues);
         long openIssues = issueRepository.countOpenIssues();
 
         var riskRows = taskRepository.countByRiskLevel();
@@ -180,6 +188,10 @@ public class GovernanceTasksApiController {
                     .collect(Collectors.toList());
 
         GovernanceSummaryResponse response = new GovernanceSummaryResponse(
+                totalArticles,
+                totalIssues,
+                articlesWithIssues,
+                articlesOk,
                 openIssues,
                 byRisk,
                 slaOverdue,
