@@ -2,6 +2,7 @@ package br.com.consisa.gov.kb.service;
 
 import br.com.consisa.gov.kb.client.movidesk.MovideskTicketResponse;
 import br.com.consisa.gov.kb.domain.*;
+import br.com.consisa.gov.kb.exception.IntegrationException;
 import br.com.consisa.gov.kb.repository.KbArticleAssignmentRepository;
 import br.com.consisa.gov.kb.repository.KbArticleRepository;
 import org.slf4j.Logger;
@@ -64,7 +65,7 @@ public class KbAssignmentService {
      * @param createTicket se deve criar ticket no Movidesk
      * @return atribuição criada
      */
-    @Transactional
+    @Transactional(noRollbackFor = IntegrationException.class)
     public KbArticleAssignment createManualAssignment(
             Long articleId,
             String agentId,
@@ -111,6 +112,7 @@ public class KbAssignmentService {
         assignment.setDescription(description);
         assignment.setStatus(AssignmentStatus.PENDING);
         assignment.setAssignedBy("MANUAL");
+        assignment.setTicketStatus(createTicket ? TicketStatus.PENDING : TicketStatus.NONE);
 
         // Salva primeiro (para ter ID)
         KbArticleAssignment saved = repository.save(assignment);
@@ -126,14 +128,19 @@ public class KbAssignmentService {
                 // Atualiza assignment com dados do ticket
                 saved.setTicketId(ticketResponse.getId());
                 saved.setTicketUrl(ticketService.buildTicketUrl(ticketResponse.getId()));
+                saved.setTicketStatus(TicketStatus.CREATED);
+                saved.setTicketCreatedAt(OffsetDateTime.now());
+                saved.setTicketLastError(null);
 
                 repository.save(saved);
 
                 log.info("🎫 Ticket criado e vinculado: ticketId={}", ticketResponse.getId());
 
-            } catch (Exception e) {
-                log.error("❌ Falha ao criar ticket (atribuição mantida): {}", e.getMessage());
-                // Não falha a operação se ticket falhar
+            } catch (IntegrationException e) {
+                log.warn("❌ Falha ao criar ticket (atribuição mantida): {}", e.getMessage());
+                markTicketFailure(saved, e.getMessage());
+                repository.save(saved);
+                throw e;
             }
         }
 
@@ -155,7 +162,7 @@ public class KbAssignmentService {
      * @param createTicket se deve criar ticket no Movidesk
      * @return atribuição criada
      */
-    @Transactional
+    @Transactional(noRollbackFor = IntegrationException.class)
     public KbArticleAssignment createAutoAssignment(
             Long articleId,
             String systemCode,
@@ -201,6 +208,7 @@ public class KbAssignmentService {
         assignment.setDescription("Atribuição automática (score: " + qualityScore + ")");
         assignment.setStatus(AssignmentStatus.PENDING);
         assignment.setAssignedBy("AUTO_ASSIGN");
+        assignment.setTicketStatus(createTicket ? TicketStatus.PENDING : TicketStatus.NONE);
 
         // Salva primeiro
         KbArticleAssignment saved = repository.save(assignment);
@@ -215,13 +223,19 @@ public class KbAssignmentService {
 
                 saved.setTicketId(ticketResponse.getId());
                 saved.setTicketUrl(ticketService.buildTicketUrl(ticketResponse.getId()));
+                saved.setTicketStatus(TicketStatus.CREATED);
+                saved.setTicketCreatedAt(OffsetDateTime.now());
+                saved.setTicketLastError(null);
 
                 repository.save(saved);
 
                 log.info("🎫 Ticket auto criado: ticketId={}", ticketResponse.getId());
 
-            } catch (Exception e) {
-                log.error("❌ Falha ao criar ticket automático: {}", e.getMessage());
+            } catch (IntegrationException e) {
+                log.warn("❌ Falha ao criar ticket automático: {}", e.getMessage());
+                markTicketFailure(saved, e.getMessage());
+                repository.save(saved);
+                throw e;
             }
         }
 
@@ -326,6 +340,56 @@ public class KbAssignmentService {
     }
 
     /**
+     * 🎫 Tenta criar ticket para uma atribuição existente (idempotente).
+     */
+    @Transactional(noRollbackFor = IntegrationException.class)
+    public KbArticleAssignment createTicketForAssignment(Long assignmentId) {
+        KbArticleAssignment assignment = repository.findById(assignmentId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Atribuição não encontrada: " + assignmentId
+                ));
+
+        if (assignment.getTicketId() != null && !assignment.getTicketId().isBlank()) {
+            log.info("🎫 Ticket já existe para assignmentId={}", assignmentId);
+            if (assignment.getTicketStatus() != TicketStatus.CREATED) {
+                assignment.setTicketStatus(TicketStatus.CREATED);
+                assignment.setTicketLastError(null);
+                repository.save(assignment);
+            }
+            return assignment;
+        }
+
+        String articleTitle = articleRepository.findById(assignment.getArticleId())
+                .map(KbArticle::getTitle)
+                .orElse("Artigo #" + assignment.getArticleId());
+
+        assignment.setTicketStatus(TicketStatus.PENDING);
+        repository.save(assignment);
+
+        try {
+            MovideskTicketResponse ticketResponse = ticketService.createTicketForAssignment(
+                    assignment,
+                    articleTitle
+            );
+
+            assignment.setTicketId(ticketResponse.getId());
+            assignment.setTicketUrl(ticketService.buildTicketUrl(ticketResponse.getId()));
+            assignment.setTicketStatus(TicketStatus.CREATED);
+            assignment.setTicketCreatedAt(OffsetDateTime.now());
+            assignment.setTicketLastError(null);
+
+            repository.save(assignment);
+
+            return assignment;
+        } catch (IntegrationException e) {
+            log.warn("❌ Falha ao criar ticket para assignmentId={}: {}", assignmentId, e.getMessage());
+            markTicketFailure(assignment, e.getMessage());
+            repository.save(assignment);
+            throw e;
+        }
+    }
+
+    /**
      * 📈 Retorna estatísticas agregadas
      */
     @Transactional(readOnly = true)
@@ -371,6 +435,14 @@ public class KbAssignmentService {
             case MEDIUM -> now.plusDays(10);
             case LOW -> now.plusDays(15);
         };
+    }
+
+    private void markTicketFailure(KbArticleAssignment assignment, String error) {
+        assignment.setTicketStatus(TicketStatus.FAILED);
+        assignment.setTicketLastError(error);
+        assignment.setTicketRetryCount(
+                assignment.getTicketRetryCount() != null ? assignment.getTicketRetryCount() + 1 : 1
+        );
     }
 
     // =========================================================

@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import br.com.consisa.gov.kb.exception.IntegrationException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -104,6 +105,31 @@ public class GlobalExceptionHandler {
         );
 
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+    }
+
+    /**
+     * Handler genérico para todas as outras exceções.
+     *
+     * REGRA: Erro real deve retornar HTTP 500, não lista vazia.
+     */
+    @ExceptionHandler(IntegrationException.class)
+    public ResponseEntity<ErrorResponse> handleIntegrationException(IntegrationException ex) {
+        String traceId = generateTraceId();
+
+        log.warn("⚠️ [{}] Erro de integração: {}", traceId, ex.getMessage());
+
+        HttpStatus status = ex.getStatus() != null ? ex.getStatus() : HttpStatus.BAD_GATEWAY;
+
+        ErrorResponse response = new ErrorResponse(
+                traceId,
+                status.value(),
+                status.getReasonPhrase(),
+                ex.getMessage(),
+                null,
+                OffsetDateTime.now(ZoneOffset.UTC)
+        );
+
+        return ResponseEntity.status(status).body(response);
     }
 
     /**

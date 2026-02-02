@@ -3,6 +3,10 @@ package br.com.consisa.gov.kb.controller.api.dto;
 import java.util.List;
 
 public record GovernanceSummaryResponse(
+        long totalArticles,
+        long totalIssues,
+        long articlesWithIssues,
+        long articlesOk,
         long totalOpenIssues,
         List<RiskSummary> manualsByRisk,
         List<SlaSummary> slaOverdueByPriority,

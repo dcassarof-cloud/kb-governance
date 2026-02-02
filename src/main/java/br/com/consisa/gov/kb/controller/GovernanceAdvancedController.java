@@ -2,6 +2,7 @@ package br.com.consisa.gov.kb.controller;
 
 import br.com.consisa.gov.kb.domain.KbArticle;
 import br.com.consisa.gov.kb.repository.KbArticleRepository;
+import br.com.consisa.gov.kb.repository.KbGovernanceIssueRepository;
 import br.com.consisa.gov.kb.service.KbGovernanceReportService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,13 +44,16 @@ public class GovernanceAdvancedController {
 
     private final KbGovernanceReportService reportService;
     private final KbArticleRepository articleRepository;
+    private final KbGovernanceIssueRepository issueRepository;
 
     public GovernanceAdvancedController(
             KbGovernanceReportService reportService,
-            KbArticleRepository articleRepository
+            KbArticleRepository articleRepository,
+            KbGovernanceIssueRepository issueRepository
     ) {
         this.reportService = reportService;
         this.articleRepository = articleRepository;
+        this.issueRepository = issueRepository;
     }
 
     // ==================== DASHBOARD CONSOLIDADO ====================
@@ -95,9 +99,13 @@ public class GovernanceAdvancedController {
 
             // Summary
             Map<String, Object> summary = new HashMap<>();
-            summary.put("total", stats.get("total"));
+            long totalArticles = articleRepository.count();
+            long articlesWithIssues = issueRepository.countDistinctArticlesWithIssues();
+            long articlesOk = Math.max(0, totalArticles - articlesWithIssues);
+            summary.put("total", totalArticles);
             summary.put("iaReady", stats.get("iaReadyCount"));
-            summary.put("withIssues", (Long) stats.get("total") - (Long) stats.get("iaReadyCount"));
+            summary.put("withIssues", articlesWithIssues);
+            summary.put("ok", articlesOk);
             summary.put("iaReadyPercentage", stats.get("iaReadyPercentage"));
             dashboard.put("summary", summary);
 

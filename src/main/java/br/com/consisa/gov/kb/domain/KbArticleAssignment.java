@@ -34,6 +34,19 @@ public class KbArticleAssignment {
     
     @Column(name = "ticket_url")
     private String ticketUrl;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "ticket_status", nullable = false, length = 20)
+    private TicketStatus ticketStatus = TicketStatus.NONE;
+
+    @Column(name = "ticket_last_error", columnDefinition = "text")
+    private String ticketLastError;
+
+    @Column(name = "ticket_created_at")
+    private OffsetDateTime ticketCreatedAt;
+
+    @Column(name = "ticket_retry_count", nullable = false)
+    private Integer ticketRetryCount = 0;
     
     // ========================================
     // DETALHES DA ATRIBUIÇÃO
@@ -211,6 +224,38 @@ public class KbArticleAssignment {
     
     public void setTicketUrl(String ticketUrl) {
         this.ticketUrl = ticketUrl;
+    }
+
+    public TicketStatus getTicketStatus() {
+        return ticketStatus;
+    }
+
+    public void setTicketStatus(TicketStatus ticketStatus) {
+        this.ticketStatus = ticketStatus;
+    }
+
+    public String getTicketLastError() {
+        return ticketLastError;
+    }
+
+    public void setTicketLastError(String ticketLastError) {
+        this.ticketLastError = ticketLastError;
+    }
+
+    public OffsetDateTime getTicketCreatedAt() {
+        return ticketCreatedAt;
+    }
+
+    public void setTicketCreatedAt(OffsetDateTime ticketCreatedAt) {
+        this.ticketCreatedAt = ticketCreatedAt;
+    }
+
+    public Integer getTicketRetryCount() {
+        return ticketRetryCount;
+    }
+
+    public void setTicketRetryCount(Integer ticketRetryCount) {
+        this.ticketRetryCount = ticketRetryCount;
     }
     
     public AssignmentReason getReason() {

@@ -11,7 +11,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.List;
 
 @Service
@@ -95,23 +94,22 @@ public class GovernanceService {
 
     @Transactional(readOnly = true)
     public List<DuplicateGroupDto> listDuplicates() {
-        return articleRepo.findDuplicateGroups().stream()
-                .map(row -> {
-                    String hash = String.valueOf(row[0]);
-                    int count = ((Number) row[1]).intValue();
+        return articleRepo.findDuplicateContentHashes().stream()
+                .filter(hash -> hash != null && !hash.isBlank())
+                .map(hash -> {
+                    var articles = articleRepo.findDuplicateArticlesByHash(hash).stream()
+                            .map(row -> new DuplicateGroupDto.DuplicateArticleDto(
+                                    row.getId(),
+                                    row.getTitle(),
+                                    row.getSystemCode(),
+                                    row.getSourceUrl(),
+                                    br.com.consisa.gov.kb.util.DateTimeUtils.toOffsetDateTime(row.getUpdatedAt())
+                            ))
+                            .toList();
 
-                    // Postgres retorna array como java.sql.Array
-                    List<Long> ids;
-                    try {
-                        java.sql.Array arr = (java.sql.Array) row[2];
-                        Long[] raw = (Long[]) arr.getArray();
-                        ids = Arrays.asList(raw);
-                    } catch (Exception e) {
-                        ids = List.of();
-                    }
-
-                    return new DuplicateGroupDto(hash, count, ids);
+                    return new DuplicateGroupDto(hash, articles.size(), articles);
                 })
+                .filter(group -> group.count() > 1)
                 .toList();
     }
 
