@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -41,7 +42,7 @@ public class GovernanceIssueWorkflowService {
             Long issueId,
             String agentId,
             String agentName,
-            OffsetDateTime dueDate,
+            LocalDate dueDate,
             String actor
     ) {
         KbGovernanceIssue issue = issueRepository.findById(issueId)
@@ -57,14 +58,17 @@ public class GovernanceIssueWorkflowService {
         assignment.setAgentId(agentId);
         assignment.setAgentName(agentName);
         assignment.setAssignedAt(OffsetDateTime.now(ZoneOffset.UTC));
-        assignment.setDueDate(dueDate);
+        OffsetDateTime dueDateTime = dueDate != null
+                ? dueDate.atStartOfDay().atOffset(ZoneOffset.ofHours(-3))
+                : null;
+        assignment.setDueDate(dueDateTime);
         assignment.setStatus(GovernanceAssignmentStatus.OPEN);
         assignmentRepository.save(assignment);
 
         issueRepository.save(issue);
 
         saveHistory(issueId, "ASSIGNED", previousStatus, issue.getStatus(), actor,
-                buildAssignmentValue(agentId, agentName, dueDate));
+                buildAssignmentValue(agentId, agentName, dueDateTime));
 
         log.info("📌 Issue {} atribuída para {} ({})", issueId, agentName, agentId);
         return assignment;
