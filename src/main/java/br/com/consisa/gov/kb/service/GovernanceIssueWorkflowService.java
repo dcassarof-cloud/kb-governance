@@ -58,10 +58,11 @@ public class GovernanceIssueWorkflowService {
         assignment.setAgentId(agentId);
         assignment.setAgentName(agentName);
         assignment.setAssignedAt(OffsetDateTime.now(ZoneOffset.UTC));
-        OffsetDateTime dueDateTime = dueDate != null
-                ? dueDate.atStartOfDay().atOffset(ZoneOffset.ofHours(-3))
-                : null;
-        assignment.setDueDate(dueDateTime);
+        OffsetDateTime dueDateTime = null;
+        if (dueDate != null) {
+            dueDateTime = dueDate.atStartOfDay().atOffset(ZoneOffset.ofHours(-3));
+            assignment.setDueDate(dueDateTime);
+        }
         assignment.setStatus(GovernanceAssignmentStatus.OPEN);
         assignmentRepository.save(assignment);
 
