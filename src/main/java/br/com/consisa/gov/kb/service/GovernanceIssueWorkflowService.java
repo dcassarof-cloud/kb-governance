@@ -5,6 +5,7 @@ import br.com.consisa.gov.kb.domain.GovernanceIssueStatus;
 import br.com.consisa.gov.kb.domain.KbGovernanceIssue;
 import br.com.consisa.gov.kb.domain.KbGovernanceIssueAssignment;
 import br.com.consisa.gov.kb.domain.KbGovernanceIssueHistory;
+import br.com.consisa.gov.kb.domain.KbGovernanceIssueType;
 import br.com.consisa.gov.kb.repository.KbGovernanceIssueAssignmentRepository;
 import br.com.consisa.gov.kb.repository.KbGovernanceIssueHistoryRepository;
 import br.com.consisa.gov.kb.repository.KbGovernanceIssueRepository;
@@ -86,6 +87,9 @@ public class GovernanceIssueWorkflowService {
         }
 
         issue.setStatus(newStatus);
+        if (newStatus != GovernanceIssueStatus.IGNORED) {
+            issue.setIgnoredReason(null);
+        }
 
         if (newStatus == GovernanceIssueStatus.RESOLVED || newStatus == GovernanceIssueStatus.IGNORED) {
             issue.setResolvedAt(OffsetDateTime.now(ZoneOffset.UTC));
@@ -114,6 +118,34 @@ public class GovernanceIssueWorkflowService {
         saveHistory(issueId, "STATUS_CHANGED", previousStatus, newStatus, actor, null);
 
         log.info("📝 Issue {} status {} -> {}", issueId, previousStatus, newStatus);
+        return issue;
+    }
+
+    @Transactional
+    public KbGovernanceIssue ignoreIssue(Long issueId, String reason, String actor) {
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("Motivo é obrigatório para ignorar uma issue");
+        }
+        KbGovernanceIssue issue = issueRepository.findById(issueId)
+                .orElseThrow(() -> new IllegalArgumentException("Issue não encontrada: " + issueId));
+
+        GovernanceIssueStatus previousStatus = issue.getStatus();
+        issue.setStatus(GovernanceIssueStatus.IGNORED);
+        issue.setIgnoredReason(reason);
+        issue.setResolvedAt(OffsetDateTime.now(ZoneOffset.UTC));
+        issue.setResolvedBy(actor);
+
+        assignmentRepository.findTop1ByIssueIdOrderByCreatedAtDesc(issueId)
+                .ifPresent(assignment -> {
+                    assignment.setStatus(GovernanceAssignmentStatus.DONE);
+                    assignmentRepository.save(assignment);
+                });
+
+        issueRepository.save(issue);
+
+        saveHistory(issueId, "IGNORED", previousStatus, GovernanceIssueStatus.IGNORED, actor, reason);
+
+        log.info("🧾 Issue {} ignorada. Motivo: {}", issueId, reason);
         return issue;
     }
 
@@ -149,6 +181,13 @@ public class GovernanceIssueWorkflowService {
     @Transactional(readOnly = true)
     public List<KbGovernanceIssueHistory> getHistory(Long issueId) {
         return historyRepository.findByIssueIdOrderByCreatedAtAsc(issueId);
+    }
+
+    @Transactional
+    public void updateStatusIfOpen(Long articleId, KbGovernanceIssueType issueType, GovernanceIssueStatus newStatus, String actor) {
+        issueRepository.findTop1ByArticleIdAndIssueTypeOrderByCreatedAtDesc(articleId, issueType)
+                .filter(issue -> issue.getStatus() != GovernanceIssueStatus.RESOLVED && issue.getStatus() != GovernanceIssueStatus.IGNORED)
+                .ifPresent(issue -> updateStatus(issue.getId(), newStatus, actor));
     }
 
     private void saveHistory(Long issueId,

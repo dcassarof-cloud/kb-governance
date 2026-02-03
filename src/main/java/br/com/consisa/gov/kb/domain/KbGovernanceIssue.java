@@ -60,8 +60,12 @@ public class KbGovernanceIssue {
     @Column(name = "resolved_by", length = 100)
     private String resolvedBy;
 
+    @Column(name = "ignored_reason", length = 400)
+    private String ignoredReason;
+
     @PrePersist
     public void prePersist() {
+        validateIgnoredReason();
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         this.createdAt = now;
         this.updatedAt = now;
@@ -69,7 +73,16 @@ public class KbGovernanceIssue {
 
     @PreUpdate
     public void preUpdate() {
+        validateIgnoredReason();
         this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
+    }
+
+    private void validateIgnoredReason() {
+        if (this.status == GovernanceIssueStatus.IGNORED) {
+            if (this.ignoredReason == null || this.ignoredReason.isBlank()) {
+                throw new IllegalStateException("ignored_reason é obrigatório quando status = IGNORED");
+            }
+        }
     }
 
     // ======================
@@ -104,4 +117,7 @@ public class KbGovernanceIssue {
 
     public String getResolvedBy() { return resolvedBy; }
     public void setResolvedBy(String resolvedBy) { this.resolvedBy = resolvedBy; }
+
+    public String getIgnoredReason() { return ignoredReason; }
+    public void setIgnoredReason(String ignoredReason) { this.ignoredReason = ignoredReason; }
 }

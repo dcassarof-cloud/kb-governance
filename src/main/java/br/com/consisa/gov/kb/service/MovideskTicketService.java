@@ -123,6 +123,41 @@ public class MovideskTicketService {
     }
 
     /**
+     * Cria ticket genérico no Movidesk.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public MovideskTicketResponse createTicket(MovideskTicketRequest request) {
+        if (defaultClientId == null || defaultClientId.isBlank()) {
+            throw new IntegrationException(
+                    "movidesk.ticket.client-id não está configurado. " +
+                            "Configure no application.properties"
+            );
+        }
+        try {
+            return movideskClient.createTicket(request);
+        } catch (Exception e) {
+            log.error("❌ Erro ao criar ticket no Movidesk: {}", e.getMessage(), e);
+            throw new IntegrationException("Falha ao criar ticket no Movidesk.", e);
+        }
+    }
+
+    /**
+     * Adiciona comentário em ticket existente.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void addTicketComment(String ticketId, String message) {
+        if (ticketId == null || ticketId.isBlank()) {
+            throw new IntegrationException("ticketId é obrigatório para comentar.");
+        }
+        MovideskTicketActionRequest request = new MovideskTicketActionRequest(
+                message,
+                defaultClientId,
+                2
+        );
+        movideskClient.addTicketAction(ticketId, request);
+    }
+
+    /**
      * Gera URL do ticket no Movidesk
      */
     public String buildTicketUrl(String ticketId) {
