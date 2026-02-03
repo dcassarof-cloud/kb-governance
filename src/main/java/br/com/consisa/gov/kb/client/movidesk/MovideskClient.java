@@ -11,6 +11,11 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
+import java.util.List;
+
 /**
  * Client HTTP responsável por consumir a API pública do Movidesk.
  *
@@ -133,6 +138,66 @@ public class MovideskClient {
         } catch (ResourceAccessException ex) {
             log.error("❌ Erro de rede Movidesk createTicket msg={}",
                     safeMsg(ex));
+            throw ex;
+        }
+    }
+
+    /**
+     * Busca tickets por período.
+     */
+    public List<MovideskTicketResponse> searchTickets(OffsetDateTime start, OffsetDateTime end) {
+        try {
+            String startParam = start != null ? start.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME) : null;
+            String endParam = end != null ? end.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME) : null;
+
+            MovideskTicketResponse[] response = restClient.get()
+                    .uri(uriBuilder -> {
+                        uriBuilder.path("/tickets")
+                                .queryParam("token", token);
+                        if (startParam != null) {
+                            uriBuilder.queryParam("createdDateFrom", startParam);
+                        }
+                        if (endParam != null) {
+                            uriBuilder.queryParam("createdDateTo", endParam);
+                        }
+                        return uriBuilder.build();
+                    })
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .body(MovideskTicketResponse[].class);
+
+            return response == null ? List.of() : Arrays.asList(response);
+        } catch (HttpClientErrorException | HttpServerErrorException ex) {
+            log.error("Erro Movidesk searchTickets status={} body={}",
+                    ex.getStatusCode(), safeBody(ex));
+            throw ex;
+        } catch (ResourceAccessException ex) {
+            log.error("Erro de rede Movidesk searchTickets msg={}", safeMsg(ex));
+            throw ex;
+        }
+    }
+
+    /**
+     * Adiciona comentário/ação em um ticket existente.
+     */
+    public void addTicketAction(String ticketId, MovideskTicketActionRequest request) {
+        try {
+            restClient.post()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/tickets/{id}/actions")
+                            .queryParam("token", token)
+                            .build(ticketId))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .accept(MediaType.APPLICATION_JSON)
+                    .body(request)
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (HttpClientErrorException | HttpServerErrorException ex) {
+            log.error("Erro Movidesk addTicketAction status={} body={}",
+                    ex.getStatusCode(), safeBody(ex));
+            throw ex;
+        } catch (ResourceAccessException ex) {
+            log.error("Erro de rede Movidesk addTicketAction msg={}", safeMsg(ex));
             throw ex;
         }
     }
