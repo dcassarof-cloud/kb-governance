@@ -113,7 +113,7 @@ public class SupportImportService {
         entity.setStatus(ticket.getStatus());
         entity.setOwnerTeam(ticket.getOwnerTeam());
         entity.setRequester(ticket.getClients() != null && !ticket.getClients().isEmpty()
-                ? ticket.getClients().get(0).getName()
+                ? ticket.getClients().get(0).getBusinessName()
                 : null);
         if (ticket.getCreatedDate() != null) {
             entity.setOriginCreatedAt(ticket.getCreatedDate().atOffset(ZoneOffset.UTC));
@@ -140,7 +140,7 @@ public class SupportImportService {
             SupportTicketMessage message = new SupportTicketMessage();
             message.setTicketId(ticket.getId());
             message.setDirection(resolveDirection(action));
-            message.setAuthor(action.getCreatedBy() != null ? action.getCreatedBy().getName() : null);
+            message.setAuthor(action.getCreatedBy() != null ? action.getCreatedBy().getBusinessName() : null);
             message.setContent(action.getDescription());
             message.setContentHtml(action.getHtmlDescription());
             message.setExternalMessageKey(key);
