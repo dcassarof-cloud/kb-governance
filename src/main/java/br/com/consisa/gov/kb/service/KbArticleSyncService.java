@@ -2,7 +2,9 @@ package br.com.consisa.gov.kb.service;
 
 import br.com.consisa.gov.kb.client.movidesk.MovideskArticleDto;
 import br.com.consisa.gov.kb.client.movidesk.MovideskClient;
+import br.com.consisa.gov.kb.domain.GovernanceSeverity;
 import br.com.consisa.gov.kb.domain.KbArticle;
+import br.com.consisa.gov.kb.domain.KbGovernanceIssueType;
 import br.com.consisa.gov.kb.domain.KbSyncIssueType;
 import br.com.consisa.gov.kb.repository.KbArticleRepository;
 import org.slf4j.Logger;
@@ -71,6 +73,7 @@ public class KbArticleSyncService {
     private final KbSyncIssueService issueService;
     private final KbArticleHashService hashService;
     private final KbSystemService systemService;
+    private final KbGovernanceIssueService governanceIssueService;
 
     public KbArticleSyncService(
             MovideskClient movideskClient,
@@ -79,7 +82,8 @@ public class KbArticleSyncService {
             KbArticleClassificationService classificationService,
             KbSyncIssueService issueService,
             KbArticleHashService hashService,
-            KbSystemService systemService
+            KbSystemService systemService,
+            KbGovernanceIssueService governanceIssueService
     ) {
         this.movideskClient = movideskClient;
         this.repository = repository;
@@ -88,6 +92,7 @@ public class KbArticleSyncService {
         this.issueService = issueService;
         this.hashService = hashService;
         this.systemService = systemService;
+        this.governanceIssueService = governanceIssueService;
     }
 
     /**
@@ -171,6 +176,14 @@ public class KbArticleSyncService {
         // ===========================
 
         KbArticle saved = repository.save(entity);
+
+        governanceIssueService.open(
+                saved.getId(),
+                KbGovernanceIssueType.REVIEW_REQUIRED,
+                GovernanceSeverity.INFO,
+                "Revisão obrigatória pendente para este manual.",
+                null
+        );
 
         log.info("✅ Artigo sincronizado. id={} title='{}'", saved.getId(), saved.getTitle());
 

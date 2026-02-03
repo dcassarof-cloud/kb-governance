@@ -3,6 +3,7 @@ package br.com.consisa.gov.kb.controller.api;
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueAssignmentResponse;
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueAssignRequest;
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueHistoryResponse;
+import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueIgnoreRequest;
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueResponse;
 import br.com.consisa.gov.kb.controller.api.dto.ResponsibleSummaryDto;
 import br.com.consisa.gov.kb.controller.api.dto.SuggestedAssigneeResponse;
@@ -26,10 +27,12 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static br.com.consisa.gov.kb.util.DateTimeUtils.toOffsetDateTime;
 import static br.com.consisa.gov.kb.util.DateTimeUtils.toOffsetDateTimeOrNull;
 
@@ -189,11 +192,39 @@ public class GovernanceApiController {
             @RequestBody GovernanceIssueStatusUpdateRequest request
     ) {
         if (request.status() == null || request.status().isBlank()) {
-            throw new IllegalArgumentException("Status é obrigatório");
+            throw new ResponseStatusException(BAD_REQUEST, "Status é obrigatório");
         }
-        String statusValue = request.status().toUpperCase();
-        GovernanceIssueStatus newStatus = GovernanceIssueStatus.valueOf(statusValue);
+        GovernanceIssueStatus newStatus = parseStatus(request.status());
+        if (newStatus == GovernanceIssueStatus.IGNORED) {
+            throw new ResponseStatusException(BAD_REQUEST, "Use /ignore com motivo obrigatório.");
+        }
         var issue = workflowService.updateStatus(id, newStatus, request.actor());
+        return ResponseEntity.ok(new GovernanceIssueStatusResponse(issue.getId(), issue.getStatus().name()));
+    }
+
+    /**
+     * POST /api/v1/governance/issues/{id}/status
+     */
+    @PostMapping("/issues/{id}/status")
+    public ResponseEntity<GovernanceIssueStatusResponse> updateIssueStatusPost(
+            @PathVariable Long id,
+            @RequestBody GovernanceIssueStatusUpdateRequest request
+    ) {
+        return updateIssueStatus(id, request);
+    }
+
+    /**
+     * POST /api/v1/governance/issues/{id}/ignore
+     */
+    @PostMapping("/issues/{id}/ignore")
+    public ResponseEntity<GovernanceIssueStatusResponse> ignoreIssue(
+            @PathVariable Long id,
+            @RequestBody GovernanceIssueIgnoreRequest request
+    ) {
+        if (request.reason() == null || request.reason().isBlank()) {
+            throw new ResponseStatusException(BAD_REQUEST, "Motivo é obrigatório");
+        }
+        var issue = workflowService.ignoreIssue(id, request.reason(), request.actor());
         return ResponseEntity.ok(new GovernanceIssueStatusResponse(issue.getId(), issue.getStatus().name()));
     }
 
@@ -358,5 +389,16 @@ public class GovernanceApiController {
                 null,
                 details
         );
+    }
+
+    private GovernanceIssueStatus parseStatus(String status) {
+        if (status == null || status.isBlank()) {
+            throw new ResponseStatusException(BAD_REQUEST, "Status é obrigatório");
+        }
+        try {
+            return GovernanceIssueStatus.valueOf(status.toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(BAD_REQUEST, "Status inválido: " + status);
+        }
     }
 }

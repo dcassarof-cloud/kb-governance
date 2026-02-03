@@ -39,6 +39,7 @@ public class KbGovernanceIssueService {
             issue.setStatus(GovernanceIssueStatus.OPEN);
             issue.setResolvedAt(null);
             issue.setResolvedBy(null);
+            issue.setIgnoredReason(null);
         } else if (previousStatus == null) {
             issue.setStatus(GovernanceIssueStatus.OPEN);
         }
