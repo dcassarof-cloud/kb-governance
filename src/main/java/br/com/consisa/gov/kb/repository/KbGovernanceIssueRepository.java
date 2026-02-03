@@ -93,6 +93,11 @@ public interface KbGovernanceIssueRepository extends JpaRepository<KbGovernanceI
         String getMessage();
         java.time.Instant getCreatedAt();  // PostgreSQL TIMESTAMPTZ → Instant
         java.time.Instant getUpdatedAt();
+        String getResponsibleId();
+        String getResponsibleType();
+        java.time.Instant getSlaDueAt();
+        java.time.Instant getResolvedAt();
+        String getIgnoredReason();
         String getAssignedAgentId();
         String getAssignedAgentName();
         java.time.Instant getDueDate();
@@ -111,6 +116,11 @@ public interface KbGovernanceIssueRepository extends JpaRepository<KbGovernanceI
           i.message           AS message,
           i.created_at        AS createdAt,
           i.updated_at        AS updatedAt,
+          i.responsible_id    AS responsibleId,
+          i.responsible_type  AS responsibleType,
+          i.sla_due_at        AS slaDueAt,
+          i.resolved_at       AS resolvedAt,
+          i.ignored_reason    AS ignoredReason,
           last_assign.agent_id AS assignedAgentId,
           last_assign.agent_name AS assignedAgentName,
           last_assign.due_date AS dueDate
@@ -125,7 +135,21 @@ public interface KbGovernanceIssueRepository extends JpaRepository<KbGovernanceI
             LIMIT 1
         ) last_assign ON true
         WHERE a.article_status = 1
-        ORDER BY i.created_at DESC
+        ORDER BY
+          CASE
+            WHEN i.status NOT IN ('RESOLVED', 'IGNORED')
+             AND i.sla_due_at IS NOT NULL
+             AND i.sla_due_at < NOW()
+            THEN 0 ELSE 1
+          END,
+          i.sla_due_at ASC NULLS LAST,
+          CASE i.severity
+            WHEN 'ERROR' THEN 3
+            WHEN 'WARN' THEN 2
+            WHEN 'INFO' THEN 1
+            ELSE 0
+          END DESC,
+          i.updated_at DESC
         """,
             countQuery = """
         SELECT COUNT(*)
@@ -153,6 +177,11 @@ public interface KbGovernanceIssueRepository extends JpaRepository<KbGovernanceI
           i.message           AS message,
           i.created_at        AS createdAt,
           i.updated_at        AS updatedAt,
+          i.responsible_id    AS responsibleId,
+          i.responsible_type  AS responsibleType,
+          i.sla_due_at        AS slaDueAt,
+          i.resolved_at       AS resolvedAt,
+          i.ignored_reason    AS ignoredReason,
           last_assign.agent_id AS assignedAgentId,
           last_assign.agent_name AS assignedAgentName,
           last_assign.due_date AS dueDate
@@ -171,12 +200,40 @@ public interface KbGovernanceIssueRepository extends JpaRepository<KbGovernanceI
           AND (:severity IS NULL OR i.severity = :severity)
           AND (:status IS NULL OR i.status = :status)
           AND (:systemCode IS NULL OR s.code = :systemCode)
+          AND (:responsibleType IS NULL OR i.responsible_type = :responsibleType)
           AND (
               :responsible IS NULL
-              OR last_assign.agent_id = :responsible
-              OR lower(last_assign.agent_name) LIKE lower(concat('%', :responsible, '%'))
+              OR i.responsible_id = :responsible
           )
-        ORDER BY i.created_at DESC
+          AND (
+              :unassigned IS NULL
+              OR :unassigned = FALSE
+              OR i.responsible_id IS NULL
+          )
+          AND (
+              :overdue IS NULL
+              OR :overdue = FALSE
+              OR (
+                  i.status NOT IN ('RESOLVED', 'IGNORED')
+                  AND i.sla_due_at IS NOT NULL
+                  AND i.sla_due_at < NOW()
+              )
+          )
+        ORDER BY
+          CASE
+            WHEN i.status NOT IN ('RESOLVED', 'IGNORED')
+             AND i.sla_due_at IS NOT NULL
+             AND i.sla_due_at < NOW()
+            THEN 0 ELSE 1
+          END,
+          i.sla_due_at ASC NULLS LAST,
+          CASE i.severity
+            WHEN 'ERROR' THEN 3
+            WHEN 'WARN' THEN 2
+            WHEN 'INFO' THEN 1
+            ELSE 0
+          END DESC,
+          i.updated_at DESC
         """,
             countQuery = """
         SELECT COUNT(*)
@@ -195,10 +252,24 @@ public interface KbGovernanceIssueRepository extends JpaRepository<KbGovernanceI
           AND (:severity IS NULL OR i.severity = :severity)
           AND (:status IS NULL OR i.status = :status)
           AND (:systemCode IS NULL OR s.code = :systemCode)
+          AND (:responsibleType IS NULL OR i.responsible_type = :responsibleType)
           AND (
               :responsible IS NULL
-              OR last_assign.agent_id = :responsible
-              OR lower(last_assign.agent_name) LIKE lower(concat('%', :responsible, '%'))
+              OR i.responsible_id = :responsible
+          )
+          AND (
+              :unassigned IS NULL
+              OR :unassigned = FALSE
+              OR i.responsible_id IS NULL
+          )
+          AND (
+              :overdue IS NULL
+              OR :overdue = FALSE
+              OR (
+                  i.status NOT IN ('RESOLVED', 'IGNORED')
+                  AND i.sla_due_at IS NOT NULL
+                  AND i.sla_due_at < NOW()
+              )
           )
         """,
             nativeQuery = true)
@@ -208,7 +279,10 @@ public interface KbGovernanceIssueRepository extends JpaRepository<KbGovernanceI
             @org.springframework.data.repository.query.Param("severity") String severity,
             @org.springframework.data.repository.query.Param("status") String status,
             @org.springframework.data.repository.query.Param("systemCode") String systemCode,
-            @org.springframework.data.repository.query.Param("responsible") String responsible
+            @org.springframework.data.repository.query.Param("responsible") String responsible,
+            @org.springframework.data.repository.query.Param("responsibleType") String responsibleType,
+            @org.springframework.data.repository.query.Param("overdue") Boolean overdue,
+            @org.springframework.data.repository.query.Param("unassigned") Boolean unassigned
     );
 
     interface IssueTypeCountRow {

@@ -2,8 +2,9 @@ package br.com.consisa.gov.kb.domain;
 
 import jakarta.persistence.*;
 
+import br.com.consisa.gov.kb.util.DateTimeUtils;
+
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 
 /**
  * Histórico de ações em uma issue de governança.
@@ -22,10 +23,10 @@ public class KbGovernanceIssueHistory {
     @Column(name = "action", nullable = false, length = 50)
     private String action;
 
-    @Column(name = "old_value", length = 300)
+    @Column(name = "old_value", columnDefinition = "text")
     private String oldValue;
 
-    @Column(name = "new_value", length = 300)
+    @Column(name = "new_value", columnDefinition = "text")
     private String newValue;
 
     @Column(name = "actor", length = 150)
@@ -36,7 +37,10 @@ public class KbGovernanceIssueHistory {
 
     @PrePersist
     public void prePersist() {
-        this.createdAt = OffsetDateTime.now(ZoneOffset.UTC);
+        if (this.actor == null || this.actor.isBlank()) {
+            this.actor = "system";
+        }
+        this.createdAt = DateTimeUtils.nowSaoPaulo();
     }
 
     public Long getId() { return id; }

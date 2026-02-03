@@ -38,6 +38,14 @@ public record GovernanceIssueResponse(
         String assignedAgentId,
         String assignedAgentName,
         OffsetDateTime dueDate,
-        String details
+        String details,
+        String responsibleId,
+        String responsibleType,
+        OffsetDateTime slaDueAt,
+        OffsetDateTime resolvedAt,
+        String ignoredReason,
+        String typeDisplayName,
+        String typeDescription,
+        String typeRecommendation
 ) {
 }
