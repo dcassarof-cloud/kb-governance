@@ -15,6 +15,7 @@ public class GovernanceOverviewRepository {
         this.entityManager = entityManager;
     }
 
+    @SuppressWarnings("unchecked")
     public Object[] fetchOverviewTotals() {
         Query query = entityManager.createNativeQuery("""
             SELECT total_open, error_open, warn_open, info_open, overdue_open, unassigned_open
@@ -24,6 +25,7 @@ public class GovernanceOverviewRepository {
         return rows.isEmpty() ? new Object[6] : rows.get(0);
     }
 
+    @SuppressWarnings("unchecked")
     public List<Object[]> fetchOverviewBySystem() {
         Query query = entityManager.createNativeQuery("""
             SELECT system_code, system_name, total_open, error_open, warn_open, info_open, overdue_open, unassigned_open
