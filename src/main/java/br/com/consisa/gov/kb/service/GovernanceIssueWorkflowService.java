@@ -183,6 +183,30 @@ public class GovernanceIssueWorkflowService {
         return historyRepository.findByIssueIdOrderByCreatedAtAsc(issueId);
     }
 
+    /**
+     * Registra entrada no histórico de uma issue (Sprint 5).
+     *
+     * <p>Método público para uso externo (controllers, outros services).
+     *
+     * @param issueId  ID da issue
+     * @param action   ação realizada (ASSIGNED, UNASSIGNED, STATUS_CHANGED, etc)
+     * @param oldValue valor anterior
+     * @param newValue novo valor
+     * @param actor    quem realizou a ação
+     */
+    @Transactional
+    public void recordHistoryEntry(Long issueId, String action, String oldValue, String newValue, String actor) {
+        KbGovernanceIssueHistory history = new KbGovernanceIssueHistory();
+        history.setIssueId(issueId);
+        history.setAction(action);
+        history.setOldValue(oldValue);
+        history.setNewValue(newValue);
+        history.setActor(actor != null ? actor : "system");
+        historyRepository.save(history);
+        log.debug("Histórico registrado: issue={}, action={}, old={}, new={}",
+                issueId, action, oldValue, newValue);
+    }
+
     @Transactional
     public void updateStatusIfOpen(Long articleId, KbGovernanceIssueType issueType, GovernanceIssueStatus newStatus, String actor) {
         issueRepository.findTop1ByArticleIdAndIssueTypeOrderByCreatedAtDesc(articleId, issueType)

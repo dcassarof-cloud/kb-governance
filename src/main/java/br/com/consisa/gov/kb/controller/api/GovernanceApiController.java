@@ -2,9 +2,13 @@ package br.com.consisa.gov.kb.controller.api;
 
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueAssignmentResponse;
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueAssignRequest;
+import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueAssignResponsibleRequest;
+import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueChangeStatusRequest;
+import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueDetailResponse;
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueHistoryResponse;
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueIgnoreRequest;
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueResponse;
+import br.com.consisa.gov.kb.controller.api.dto.GovernanceOverviewResponse;
 import br.com.consisa.gov.kb.controller.api.dto.ResponsibleSummaryDto;
 import br.com.consisa.gov.kb.controller.api.dto.SuggestedAssigneeResponse;
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueStatusResponse;
@@ -16,11 +20,15 @@ import br.com.consisa.gov.kb.dto.PageResponseDto;
 import br.com.consisa.gov.kb.domain.GovernanceIssueStatus;
 import br.com.consisa.gov.kb.domain.KbArticle;
 import br.com.consisa.gov.kb.domain.KbGovernanceIssue;
+import br.com.consisa.gov.kb.domain.KbGovernanceIssueType;
 import br.com.consisa.gov.kb.repository.KbArticleRepository;
 import br.com.consisa.gov.kb.repository.KbGovernanceIssueRepository;
 import br.com.consisa.gov.kb.service.GovernanceService;
 import br.com.consisa.gov.kb.service.GovernanceAssigneeService;
 import br.com.consisa.gov.kb.service.GovernanceIssueWorkflowService;
+import br.com.consisa.gov.kb.service.GovernanceOverviewService;
+import br.com.consisa.gov.kb.service.GovernanceSlaService;
+import br.com.consisa.gov.kb.service.IssueTypeMetaRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
@@ -55,19 +63,28 @@ public class GovernanceApiController {
     private final GovernanceService governanceService;
     private final GovernanceIssueWorkflowService workflowService;
     private final GovernanceAssigneeService assigneeService;
+    private final GovernanceOverviewService overviewService;
+    private final GovernanceSlaService slaService;
+    private final IssueTypeMetaRegistry typeMetaRegistry;
 
     public GovernanceApiController(
             KbGovernanceIssueRepository issueRepo,
             KbArticleRepository articleRepo,
             GovernanceService governanceService,
             GovernanceIssueWorkflowService workflowService,
-            GovernanceAssigneeService assigneeService
+            GovernanceAssigneeService assigneeService,
+            GovernanceOverviewService overviewService,
+            GovernanceSlaService slaService,
+            IssueTypeMetaRegistry typeMetaRegistry
     ) {
         this.issueRepo = issueRepo;
         this.articleRepo = articleRepo;
         this.governanceService = governanceService;
         this.workflowService = workflowService;
         this.assigneeService = assigneeService;
+        this.overviewService = overviewService;
+        this.slaService = slaService;
+        this.typeMetaRegistry = typeMetaRegistry;
     }
 
     /**
@@ -81,7 +98,34 @@ public class GovernanceApiController {
             @RequestParam(defaultValue = "10") int size
     ) {
         log.info("GET /api/v1/governance (redirecting to /issues)");
-        return getIssues(page, size, null, null, null, null, null, null, null);
+        return getIssues(page, size, null, null, null, null, null, null, null, null, null, null, null);
+    }
+
+    // ========================================
+    // SPRINT 5: Overview Gerencial
+    // ========================================
+
+    /**
+     * GET /api/v1/governance/overview
+     *
+     * <p>Retorna overview gerencial com totais e métricas por sistema.
+     *
+     * @return overview com totals, bySystem e generatedAt
+     */
+    @GetMapping("/overview")
+    @Transactional(readOnly = true)
+    public ResponseEntity<GovernanceOverviewResponse> getOverview() {
+        log.info("GET /api/v1/governance/overview");
+
+        GovernanceOverviewResponse overview = overviewService.generateOverview();
+
+        log.info("✅ Overview gerado: open={}, critical={}, overdue={}, systems={}",
+                overview.totals().open(),
+                overview.totals().criticalOpen(),
+                overview.totals().overdue(),
+                overview.bySystem().size());
+
+        return ResponseEntity.ok(overview);
     }
 
     /**
@@ -89,15 +133,25 @@ public class GovernanceApiController {
      *
      * 📋 LISTA PAGINADA DE ISSUES DE GOVERNANÇA COM FILTROS
      *
-     * FILTROS SUPORTADOS (Sprint 2):
-     * - type: INCOMPLETE_CONTENT, DUPLICATE_CONTENT, OUTDATED_CONTENT, INCONSISTENT_CONTENT
-     * - status: OPEN, IN_PROGRESS, RESOLVED
+     * FILTROS SUPORTADOS (Sprint 5):
+     * - type/issueType: INCOMPLETE_CONTENT, DUPLICATE_CONTENT, etc
+     * - severity: ERROR, WARN, INFO
+     * - status: OPEN, ASSIGNED, IN_PROGRESS, RESOLVED, IGNORED
+     * - systemCode: código do sistema
+     * - responsibleType: USER, TEAM
+     * - responsibleId: ID do responsável
+     * - overdue: true para filtrar apenas vencidas
+     * - unassigned: true para filtrar apenas sem responsável
+     *
+     * ORDENAÇÃO (Sprint 5):
+     * - Vencidas primeiro (sla_due_at asc com overdue em cima)
+     * - Depois severidade desc (ERROR > WARN > INFO)
+     * - Depois created_at desc
      *
      * REGRAS:
      * - page é 1-based (converte para 0-based internamente)
-     * - Retorna issues com dados do artigo e sistema enriquecidos
+     * - Retorna issues com dados do artigo, sistema e SLA enriquecidos
      * - Sem dados = lista vazia (não é erro)
-     * - Erro real = HTTP 500 (tratado pelo GlobalExceptionHandler)
      */
     @GetMapping("/issues")
     @Transactional(readOnly = true)
@@ -110,36 +164,53 @@ public class GovernanceApiController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String systemCode,
             @RequestParam(required = false) String assigned,
-            @RequestParam(required = false) String responsible
+            @RequestParam(required = false) String responsible,
+            @RequestParam(required = false) String responsibleType,
+            @RequestParam(required = false) String responsibleId,
+            @RequestParam(required = false) Boolean overdue,
+            @RequestParam(required = false) Boolean unassigned
     ) {
-        log.info("GET /api/v1/governance/issues?page={}&size={}&type={}&issueType={}&status={}&systemCode={}&assigned={}",
-                page, size, type, issueType, status, systemCode, assigned);
+        log.info("GET /api/v1/governance/issues?page={}&size={}&type={}&status={}&systemCode={}&overdue={}&unassigned={}",
+                page, size, type, status, systemCode, overdue, unassigned);
 
         // Converte page de 1-based para 0-based
         int pageIndex = Math.max(0, page - 1);
         int safeSize = Math.max(1, Math.min(size, 100));
         var pageable = PageRequest.of(pageIndex, safeSize);
 
-        // Usa query com filtros se type ou status foram informados
-        // Passa null para filtros vazios ou em branco
+        // Normaliza filtros
         String rawType = (issueType != null && !issueType.isBlank()) ? issueType : type;
         String filterType = (rawType != null && !rawType.isBlank()) ? rawType : null;
         String filterSeverity = (severity != null && !severity.isBlank()) ? severity : null;
         String filterStatus = (status != null && !status.isBlank()) ? status : null;
         String filterSystemCode = (systemCode != null && !systemCode.isBlank()) ? systemCode : null;
-        String rawAssigned = (assigned != null && !assigned.isBlank()) ? assigned : responsible;
-        String filterResponsible = (rawAssigned != null && !rawAssigned.isBlank()) ? rawAssigned : null;
+        String filterResponsibleType = (responsibleType != null && !responsibleType.isBlank()) ? responsibleType : null;
 
-        var pageResult = (filterType != null || filterStatus != null || filterSeverity != null || filterSystemCode != null || filterResponsible != null)
-                ? issueRepo.pageIssuesFiltered(pageable, filterType, filterSeverity, filterStatus, filterSystemCode, filterResponsible)
-                : issueRepo.pageIssues(pageable);
+        // Retrocompatibilidade: assigned/responsible pode ser responsibleId
+        String rawResponsibleId = (responsibleId != null && !responsibleId.isBlank()) ? responsibleId : responsible;
+        if (rawResponsibleId == null || rawResponsibleId.isBlank()) {
+            rawResponsibleId = assigned;
+        }
+        String filterResponsibleId = (rawResponsibleId != null && !rawResponsibleId.isBlank()) ? rawResponsibleId : null;
 
-        log.info("📊 Total de issues (filtros: type={}, status={}, system={}, assigned={}): {}",
-                filterType, filterStatus, filterSystemCode, filterResponsible, pageResult.getTotalElements());
+        // Usa query avançada (Sprint 5)
+        var pageResult = issueRepo.pageIssuesAdvanced(
+                pageable,
+                filterType,
+                filterSeverity,
+                filterStatus,
+                filterSystemCode,
+                filterResponsibleType,
+                filterResponsibleId,
+                overdue,
+                unassigned
+        );
+
+        log.info("📊 Total de issues (filtros avançados): {}", pageResult.getTotalElements());
 
         // Mapeia para DTO com tratamento robusto
         List<GovernanceIssueResponse> items = pageResult.getContent().stream()
-                .map(this::mapIssueRowToDto)
+                .map(this::mapIssueDetailRowToDto)
                 .collect(Collectors.toList());
 
         PaginatedResponse<GovernanceIssueResponse> response = new PaginatedResponse<>(
@@ -154,6 +225,29 @@ public class GovernanceApiController {
                 items.size(), page, pageResult.getTotalPages());
 
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Mapeia IssueDetailRow (Sprint 5) para DTO de compatibilidade.
+     */
+    private GovernanceIssueResponse mapIssueDetailRowToDto(KbGovernanceIssueRepository.IssueDetailRow row) {
+        return new GovernanceIssueResponse(
+                row.getId(),
+                row.getIssueType() != null ? row.getIssueType() : "UNKNOWN",
+                row.getSeverity() != null ? row.getSeverity() : "WARN",
+                row.getStatus() != null ? row.getStatus() : "OPEN",
+                row.getArticleId(),
+                row.getArticleTitle(),
+                row.getSystemCode(),
+                row.getSystemName(),
+                row.getMessage(),
+                toOffsetDateTime(row.getCreatedAt()),
+                toOffsetDateTimeOrNull(row.getUpdatedAt()),
+                row.getAssignedAgentId(),
+                row.getAssignedAgentName(),
+                toOffsetDateTimeOrNull(row.getDueDate()),
+                row.getMessage()
+        );
     }
 
     /**
@@ -226,6 +320,148 @@ public class GovernanceApiController {
         }
         var issue = workflowService.ignoreIssue(id, request.reason(), request.actor());
         return ResponseEntity.ok(new GovernanceIssueStatusResponse(issue.getId(), issue.getStatus().name()));
+    }
+
+    // ========================================
+    // SPRINT 5: Atribuição de Responsável Direto
+    // ========================================
+
+    /**
+     * PUT /api/v1/governance/issues/{id}/assign
+     *
+     * <p>Atribui ou remove responsável direto de uma issue (Sprint 5).
+     *
+     * <p>Diferente do POST /assign legado que cria assignment separado,
+     * este endpoint atualiza diretamente responsible_id e responsible_type na issue.
+     *
+     * @param id      ID da issue
+     * @param request dados do responsável
+     * @return issue atualizada
+     */
+    @PutMapping("/issues/{id}/assign")
+    @Transactional
+    public ResponseEntity<GovernanceIssueDetailResponse> assignResponsible(
+            @PathVariable Long id,
+            @RequestBody GovernanceIssueAssignResponsibleRequest request
+    ) {
+        log.info("PUT /api/v1/governance/issues/{}/assign - type={}, id={}",
+                id, request.responsibleType(), request.responsibleId());
+
+        if (!request.isValid()) {
+            throw new ResponseStatusException(BAD_REQUEST,
+                    "responsibleType e responsibleId devem estar ambos preenchidos ou ambos vazios");
+        }
+
+        KbGovernanceIssue issue = issueRepo.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(BAD_REQUEST, "Issue não encontrada: " + id));
+
+        String oldResponsible = buildResponsibleString(issue.getResponsibleType(), issue.getResponsibleId());
+
+        // Atualiza responsável
+        issue.setResponsibleType(request.isUnassign() ? null : request.responsibleType());
+        issue.setResponsibleId(request.isUnassign() ? null : request.responsibleId());
+
+        // Se está atribuindo e status é OPEN, muda para ASSIGNED
+        if (!request.isUnassign() && issue.getStatus() == GovernanceIssueStatus.OPEN) {
+            issue.setStatus(GovernanceIssueStatus.ASSIGNED);
+        }
+
+        issueRepo.save(issue);
+
+        // Registra histórico
+        String newResponsible = buildResponsibleString(issue.getResponsibleType(), issue.getResponsibleId());
+        String action = request.isUnassign() ? "UNASSIGNED" : "ASSIGNED";
+        workflowService.recordHistoryEntry(id, action, oldResponsible, newResponsible, "system");
+
+        log.info("✅ Responsável {} para issue {}: {} -> {}",
+                request.isUnassign() ? "removido" : "atribuído",
+                id, oldResponsible, newResponsible);
+
+        return ResponseEntity.ok(mapIssueToDetailDto(issue));
+    }
+
+    /**
+     * PUT /api/v1/governance/issues/{id}/status
+     *
+     * <p>Altera status de uma issue (Sprint 5).
+     *
+     * <p>Regras:
+     * <ul>
+     *   <li>IGNORED requer ignoredReason</li>
+     *   <li>RESOLVED define resolvedAt = now</li>
+     *   <li>RESOLVED → OPEN recalcula SLA (usa now como base)</li>
+     *   <li>OPEN limpa resolvedAt</li>
+     * </ul>
+     *
+     * @param id      ID da issue
+     * @param request novo status e motivo (se IGNORED)
+     * @return issue atualizada
+     */
+    @PutMapping("/issues/{id}/status")
+    @Transactional
+    public ResponseEntity<GovernanceIssueDetailResponse> changeStatus(
+            @PathVariable Long id,
+            @RequestBody GovernanceIssueChangeStatusRequest request
+    ) {
+        log.info("PUT /api/v1/governance/issues/{}/status - status={}", id, request.status());
+
+        if (!request.isValid()) {
+            throw new ResponseStatusException(BAD_REQUEST,
+                    "Status inválido ou motivo obrigatório para IGNORED");
+        }
+
+        GovernanceIssueStatus newStatus;
+        try {
+            newStatus = GovernanceIssueStatus.valueOf(request.normalizedStatus());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(BAD_REQUEST, "Status inválido: " + request.status());
+        }
+
+        KbGovernanceIssue issue = issueRepo.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(BAD_REQUEST, "Issue não encontrada: " + id));
+
+        GovernanceIssueStatus oldStatus = issue.getStatus();
+
+        if (oldStatus == newStatus) {
+            return ResponseEntity.ok(mapIssueToDetailDto(issue));
+        }
+
+        // Atualiza status
+        issue.setStatus(newStatus);
+
+        // Regras de transição
+        if (newStatus == GovernanceIssueStatus.RESOLVED) {
+            issue.setResolvedAt(java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC));
+            issue.setIgnoredReason(null);
+        } else if (newStatus == GovernanceIssueStatus.IGNORED) {
+            issue.setResolvedAt(java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC));
+            issue.setIgnoredReason(request.ignoredReason());
+        } else if (newStatus == GovernanceIssueStatus.OPEN) {
+            // Reabertura: recalcula SLA usando now como base
+            issue.setResolvedAt(null);
+            issue.setIgnoredReason(null);
+            if (oldStatus == GovernanceIssueStatus.RESOLVED || oldStatus == GovernanceIssueStatus.IGNORED) {
+                issue.setSlaDueAt(slaService.calculateReopenedSlaDueAt(issue.getSeverity()));
+            }
+        } else {
+            issue.setIgnoredReason(null);
+        }
+
+        issueRepo.save(issue);
+
+        // Registra histórico
+        workflowService.recordHistoryEntry(id, "STATUS_CHANGED", oldStatus.name(), newStatus.name(), "system");
+
+        log.info("✅ Status alterado para issue {}: {} -> {}", id, oldStatus, newStatus);
+
+        return ResponseEntity.ok(mapIssueToDetailDto(issue));
+    }
+
+    private String buildResponsibleString(String type, String id) {
+        if (type == null && id == null) {
+            return null;
+        }
+        return (type != null ? type : "") + ":" + (id != null ? id : "");
     }
 
     /**
@@ -400,5 +636,63 @@ public class GovernanceApiController {
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(BAD_REQUEST, "Status inválido: " + status);
         }
+    }
+
+    /**
+     * Mapeia entidade KbGovernanceIssue para DTO detalhado (Sprint 5).
+     */
+    private GovernanceIssueDetailResponse mapIssueToDetailDto(KbGovernanceIssue issue) {
+        KbArticle article = articleRepo.findById(issue.getArticleId()).orElse(null);
+
+        String articleTitle = null;
+        String systemCode = null;
+        String systemName = null;
+
+        if (article != null) {
+            articleTitle = article.getTitle();
+            if (article.getSystem() != null) {
+                systemCode = article.getSystem().getCode();
+                systemName = article.getSystem().getName();
+            }
+        }
+
+        // Metadados do tipo
+        String typeDisplayName = typeMetaRegistry.getDisplayName(issue.getIssueType());
+        String typeDescription = typeMetaRegistry.getDescription(issue.getIssueType());
+        String typeRecommendation = typeMetaRegistry.getRecommendation(issue.getIssueType());
+
+        // Verifica se está vencida
+        boolean overdue = slaService.isOverdue(
+                java.time.OffsetDateTime.now(),
+                issue.getSlaDueAt(),
+                issue.getStatus()
+        );
+
+        return new GovernanceIssueDetailResponse(
+                issue.getId(),
+                issue.getIssueType().name(),
+                issue.getSeverity().name(),
+                issue.getStatus().name(),
+                issue.getArticleId(),
+                articleTitle,
+                systemCode,
+                systemName,
+                issue.getMessage(),
+                issue.getCreatedAt(),
+                issue.getUpdatedAt(),
+                null, // assignedAgentId (legacy)
+                null, // assignedAgentName (legacy)
+                null, // dueDate (legacy)
+                issue.getResponsibleId(),
+                issue.getResponsibleType(),
+                issue.getSlaDueAt(),
+                issue.getResolvedAt(),
+                issue.getIgnoredReason(),
+                overdue,
+                typeDisplayName,
+                typeDescription,
+                typeRecommendation,
+                issue.getMessage()
+        );
     }
 }

@@ -63,6 +63,30 @@ public class KbGovernanceIssue {
     @Column(name = "ignored_reason", length = 400)
     private String ignoredReason;
 
+    /**
+     * ID do responsável atribuído (usuário ou time).
+     * Pode ser null quando issue ainda não foi atribuída.
+     */
+    @Column(name = "responsible_id", length = 100)
+    private String responsibleId;
+
+    /**
+     * Tipo do responsável: USER ou TEAM.
+     * Null quando sem responsável.
+     */
+    @Column(name = "responsible_type", length = 10)
+    private String responsibleType;
+
+    /**
+     * Prazo de SLA calculado com base na severidade.
+     * Regras (Sprint 5):
+     * - ERROR: 3 dias
+     * - WARN: 15 dias
+     * - INFO: 30 dias
+     */
+    @Column(name = "sla_due_at")
+    private OffsetDateTime slaDueAt;
+
     @PrePersist
     public void prePersist() {
         validateIgnoredReason();
@@ -120,4 +144,13 @@ public class KbGovernanceIssue {
 
     public String getIgnoredReason() { return ignoredReason; }
     public void setIgnoredReason(String ignoredReason) { this.ignoredReason = ignoredReason; }
+
+    public String getResponsibleId() { return responsibleId; }
+    public void setResponsibleId(String responsibleId) { this.responsibleId = responsibleId; }
+
+    public String getResponsibleType() { return responsibleType; }
+    public void setResponsibleType(String responsibleType) { this.responsibleType = responsibleType; }
+
+    public OffsetDateTime getSlaDueAt() { return slaDueAt; }
+    public void setSlaDueAt(OffsetDateTime slaDueAt) { this.slaDueAt = slaDueAt; }
 }
