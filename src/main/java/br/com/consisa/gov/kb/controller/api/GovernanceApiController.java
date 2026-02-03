@@ -93,7 +93,21 @@ public class GovernanceApiController {
             @RequestParam(defaultValue = "10") int size
     ) {
         log.info("GET /api/v1/governance (redirecting to /issues)");
-        return getIssues(page, size, null, null, null, null, null, null, null, null, null, null);
+        return getIssues(
+                page,
+                size,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
     }
 
     /**
