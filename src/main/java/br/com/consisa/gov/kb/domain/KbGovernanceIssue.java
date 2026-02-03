@@ -5,8 +5,9 @@ import jakarta.persistence.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+import br.com.consisa.gov.kb.util.DateTimeUtils;
+
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 
 /**
  * Issue de governança (qualidade) gerada por detectores.
@@ -38,6 +39,16 @@ public class KbGovernanceIssue {
     @Column(name = "message", length = 400)
     private String message;
 
+    @Column(name = "responsible_id", length = 100)
+    private String responsibleId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "responsible_type", length = 10)
+    private GovernanceResponsibleType responsibleType;
+
+    @Column(name = "sla_due_at")
+    private OffsetDateTime slaDueAt;
+
     /**
      * Evidências em JSONB (Postgres).
      * Ex: {"textLen":123,"placeholder":true,"minChars":500}
@@ -60,13 +71,13 @@ public class KbGovernanceIssue {
     @Column(name = "resolved_by", length = 100)
     private String resolvedBy;
 
-    @Column(name = "ignored_reason", length = 400)
+    @Column(name = "ignored_reason", columnDefinition = "text")
     private String ignoredReason;
 
     @PrePersist
     public void prePersist() {
         validateIgnoredReason();
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        OffsetDateTime now = DateTimeUtils.nowSaoPaulo();
         this.createdAt = now;
         this.updatedAt = now;
     }
@@ -74,7 +85,7 @@ public class KbGovernanceIssue {
     @PreUpdate
     public void preUpdate() {
         validateIgnoredReason();
-        this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
+        this.updatedAt = DateTimeUtils.nowSaoPaulo();
     }
 
     private void validateIgnoredReason() {
@@ -108,6 +119,15 @@ public class KbGovernanceIssue {
 
     public JsonNode getEvidence() { return evidence; }
     public void setEvidence(JsonNode evidence) { this.evidence = evidence; }
+
+    public String getResponsibleId() { return responsibleId; }
+    public void setResponsibleId(String responsibleId) { this.responsibleId = responsibleId; }
+
+    public GovernanceResponsibleType getResponsibleType() { return responsibleType; }
+    public void setResponsibleType(GovernanceResponsibleType responsibleType) { this.responsibleType = responsibleType; }
+
+    public OffsetDateTime getSlaDueAt() { return slaDueAt; }
+    public void setSlaDueAt(OffsetDateTime slaDueAt) { this.slaDueAt = slaDueAt; }
 
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public OffsetDateTime getUpdatedAt() { return updatedAt; }

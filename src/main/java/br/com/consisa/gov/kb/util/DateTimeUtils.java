@@ -2,6 +2,7 @@ package br.com.consisa.gov.kb.util;
 
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 
 /**
@@ -18,6 +19,8 @@ import java.time.ZoneOffset;
  * - Fallback para now() quando necessário
  */
 public final class DateTimeUtils {
+
+    public static final ZoneId SAO_PAULO = ZoneId.of("America/Sao_Paulo");
 
     private DateTimeUtils() {
         // Utility class
@@ -64,6 +67,13 @@ public final class DateTimeUtils {
      */
     public static OffsetDateTime nowUtc() {
         return OffsetDateTime.now(ZoneOffset.UTC);
+    }
+
+    /**
+     * Retorna OffsetDateTime atual em America/Sao_Paulo.
+     */
+    public static OffsetDateTime nowSaoPaulo() {
+        return OffsetDateTime.now(SAO_PAULO);
     }
 
     /**
