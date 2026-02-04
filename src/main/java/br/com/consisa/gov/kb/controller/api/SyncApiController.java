@@ -2,11 +2,14 @@ package br.com.consisa.gov.kb.controller.api;
 
 import br.com.consisa.gov.kb.controller.api.dto.SyncConfigResponse;
 import br.com.consisa.gov.kb.controller.api.dto.SyncConfigUpdateRequest;
+import br.com.consisa.gov.kb.controller.api.dto.SyncRunLatestResponse;
 import br.com.consisa.gov.kb.controller.api.dto.SyncRunResponse;
+import br.com.consisa.gov.kb.controller.api.dto.SyncRunStartResponse;
 import br.com.consisa.gov.kb.controller.api.dto.TriggerSyncRequest;
 import br.com.consisa.gov.kb.domain.KbSyncConfig;
 import br.com.consisa.gov.kb.domain.KbSyncRun;
 import br.com.consisa.gov.kb.domain.SyncMode;
+import br.com.consisa.gov.kb.domain.SyncRunStatus;
 import br.com.consisa.gov.kb.repository.KbSyncRunRepository;
 import br.com.consisa.gov.kb.service.GovernanceLanguageService;
 import br.com.consisa.gov.kb.service.KbSyncOrchestratorService;
@@ -19,6 +22,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static org.springframework.http.HttpStatus.BAD_REQUEST;
 /**
  * 🔄 Sync API Controller
  *
@@ -136,16 +140,64 @@ public class SyncApiController {
     }
 
     /**
-     * POST /api/v1/sync/run
-     *
-     * Alias para /runs (compatibilidade com botão do front).
+     * POST /api/v1/sync/run?mode={FULL|INCREMENTAL|DELTA|DELTA_WINDOW}&daysBack={int}
      */
     @PostMapping("/run")
-    public ResponseEntity<SyncRunResponse> triggerSyncAlias(
+    public ResponseEntity<SyncRunStartResponse> runSync(
+            @RequestParam(required = false) String mode,
+            @RequestParam(required = false) Integer daysBack,
             @RequestBody(required = false) TriggerSyncRequest request
     ) {
-        log.info("POST /api/v1/sync/run (alias)");
-        return triggerSync(request);
+        SyncMode resolvedMode = parseMode(mode != null ? mode : (request != null ? request.mode() : null));
+        Integer safeDaysBack = normalizeDaysBack(daysBack != null ? daysBack : (request != null ? request.daysBack() : null));
+
+        log.info("POST /api/v1/sync/run mode={} daysBack={}", resolvedMode, safeDaysBack);
+
+        try {
+            KbSyncRun run = orchestratorService.runNow(resolvedMode, safeDaysBack);
+            return ResponseEntity.ok(new SyncRunStartResponse(
+                    run.getId() != null ? run.getId().toString() : null,
+                    normalizeMode(run.getMode()),
+                    run.getStartedAt(),
+                    normalizeStatus(run.getStatus()),
+                    "Sync iniciado"
+            ));
+        } catch (IllegalStateException ex) {
+            log.warn("⚠️ {}", ex.getMessage());
+            return ResponseEntity.status(409).body(new SyncRunStartResponse(
+                    null,
+                    normalizeMode(resolvedMode),
+                    null,
+                    "FAILED",
+                    ex.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * GET /api/v1/sync/runs/latest
+     */
+    @GetMapping("/runs/latest")
+    public ResponseEntity<SyncRunLatestResponse> getLatestRun() {
+        log.info("GET /api/v1/sync/runs/latest");
+
+        return syncRunRepo.findTop1ByOrderByStartedAtDesc()
+                .map(run -> ResponseEntity.ok(new SyncRunLatestResponse(
+                        run.getId() != null ? run.getId().toString() : null,
+                        normalizeMode(run.getMode()),
+                        run.getStartedAt(),
+                        run.getFinishedAt(),
+                        normalizeStatus(run.getStatus()),
+                        mapStats(run)
+                )))
+                .orElseGet(() -> ResponseEntity.ok(new SyncRunLatestResponse(
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        new SyncRunLatestResponse.Stats(0, 0, 0, 0)
+                )));
     }
 
     /**
@@ -248,6 +300,61 @@ public class SyncApiController {
                 languageService.syncModeLabel(config.getMode()),
                 config.getIntervalMinutes(),
                 config.getDaysBack()
+        );
+    }
+
+    private SyncMode parseMode(String mode) {
+        if (mode == null || mode.isBlank()) {
+            return SyncMode.DELTA_WINDOW;
+        }
+        String normalized = mode.trim().toUpperCase();
+        return switch (normalized) {
+            case "FULL" -> SyncMode.FULL;
+            case "INCREMENTAL", "DELTA", "DELTA_WINDOW" -> SyncMode.DELTA_WINDOW;
+            default -> throw new org.springframework.web.server.ResponseStatusException(
+                    BAD_REQUEST, "Modo inválido: " + mode
+            );
+        };
+    }
+
+    private Integer normalizeDaysBack(Integer daysBack) {
+        if (daysBack == null) {
+            return null;
+        }
+        if (daysBack < 0) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    BAD_REQUEST, "daysBack deve ser maior ou igual a 0"
+            );
+        }
+        return daysBack;
+    }
+
+    private String normalizeMode(SyncMode mode) {
+        if (mode == null) {
+            return null;
+        }
+        return mode == SyncMode.DELTA_WINDOW ? "DELTA" : mode.name();
+    }
+
+    private String normalizeStatus(SyncRunStatus status) {
+        if (status == null) {
+            return null;
+        }
+        return switch (status) {
+            case RUNNING -> "RUNNING";
+            case SUCCESS -> "COMPLETED";
+            case FAILED -> "FAILED";
+        };
+    }
+
+    private SyncRunLatestResponse.Stats mapStats(KbSyncRun run) {
+        int processed = run.getSyncedCount() + run.getUpdatedCount()
+                + run.getSkippedCount() + run.getNotFoundCount();
+        return new SyncRunLatestResponse.Stats(
+                processed,
+                run.getSyncedCount(),
+                run.getUpdatedCount(),
+                run.getErrorCount()
         );
     }
 }

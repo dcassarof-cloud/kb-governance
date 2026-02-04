@@ -1,7 +1,5 @@
 package br.com.consisa.gov.kb.controller.api.dto;
 
-import br.com.consisa.gov.kb.dto.GovernanceLabelDto;
-
 import java.time.OffsetDateTime;
 
 /**
@@ -28,27 +26,19 @@ import java.time.OffsetDateTime;
 
 public record GovernanceIssueResponse(
         Long id,
-        GovernanceLabelDto issueType,
-        GovernanceLabelDto severity,
-        GovernanceLabelDto status,
-        Long articleId,
-        String articleTitle,
-        String systemCode,
-        String systemName,
-        String message,
-        OffsetDateTime createdAt,
-        OffsetDateTime updatedAt,
-        String assignedAgentId,
-        String assignedAgentName,
-        OffsetDateTime dueDate,
-        String details,
-        String responsibleId,
-        GovernanceLabelDto responsibleType,
-        OffsetDateTime slaDueAt,
-        OffsetDateTime resolvedAt,
-        String ignoredReason,
+        String type,
         String typeDisplayName,
         String typeDescription,
-        String typeRecommendation
+        String typeRecommendation,
+        String systemCode,
+        String systemName,
+        String status,
+        String severity,
+        String responsibleType,
+        String responsibleId,
+        OffsetDateTime slaDueAt,
+        boolean overdue,
+        OffsetDateTime createdAt,
+        OffsetDateTime updatedAt
 ) {
 }

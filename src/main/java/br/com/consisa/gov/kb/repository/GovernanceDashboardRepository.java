@@ -41,7 +41,8 @@ public class GovernanceDashboardRepository {
                 COALESCE(s.code, 'UNCLASSIFIED') AS system_code,
                 COALESCE(s.name, 'Não classificado') AS system_name,
                 i.severity,
-                i.sla_due_at
+                i.sla_due_at,
+                i.created_at
             FROM kb_governance_issue i
             JOIN kb_article a ON a.id = i.article_id
             LEFT JOIN kb_system s ON s.id = a.system_id

@@ -22,7 +22,8 @@ public record GovernanceDashboardResponse(
     }
 
     public record TopRisk(
-            String system,
+            String systemCode,
+            String systemName,
             double healthScore,
             long errorCount,
             long overdueCount,
@@ -39,16 +40,19 @@ public record GovernanceDashboardResponse(
     public record OverdueIssue(
             long id,
             String type,
-            String system,
+            String systemCode,
+            String systemName,
             String severity,
-            OffsetDateTime slaDueAt
+            OffsetDateTime slaDueAt,
+            OffsetDateTime createdAt
     ) {
     }
 
     public record UnassignedIssue(
             long id,
             String type,
-            String system,
+            String systemCode,
+            String systemName,
             String severity,
             OffsetDateTime createdAt
     ) {
