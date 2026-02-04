@@ -8,13 +8,12 @@ import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueIgnoreRequest;
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueResponse;
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueStatusResponse;
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueStatusUpdateRequest;
-import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssuesPageResponse;
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceOverviewResponse;
+import br.com.consisa.gov.kb.controller.api.dto.PaginatedResponse;
 import br.com.consisa.gov.kb.controller.api.dto.ResponsibleSummaryDto;
 import br.com.consisa.gov.kb.controller.api.dto.SuggestedAssigneeResponse;
 import br.com.consisa.gov.kb.dto.DuplicateGroupDto;
 import br.com.consisa.gov.kb.dto.GovernanceManualDto;
-import br.com.consisa.gov.kb.dto.PageResponseDto;
 import br.com.consisa.gov.kb.domain.GovernanceSeverity;
 import br.com.consisa.gov.kb.domain.GovernanceIssueStatus;
 import br.com.consisa.gov.kb.domain.GovernanceResponsibleType;
@@ -42,7 +41,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Locale;
-import java.util.stream.Collectors;
 
 import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
@@ -101,7 +99,7 @@ public class GovernanceApiController {
      */
     @GetMapping
     @Transactional(readOnly = true)
-    public ResponseEntity<GovernanceIssuesPageResponse> getGovernance(
+    public ResponseEntity<PaginatedResponse<GovernanceIssueResponse>> getGovernance(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size,
             HttpServletRequest request
@@ -143,7 +141,7 @@ public class GovernanceApiController {
      */
     @GetMapping("/issues")
     @Transactional(readOnly = true)
-    public ResponseEntity<GovernanceIssuesPageResponse> getIssues(
+    public ResponseEntity<PaginatedResponse<GovernanceIssueResponse>> getIssues(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String type,
@@ -198,19 +196,11 @@ public class GovernanceApiController {
                 filterType, filterStatus, filterSystemCode, filterResponsible, pageResult.getTotalElements());
 
         // Mapeia para DTO com tratamento robusto
-        List<GovernanceIssueResponse> items = pageResult.getContent().stream()
-                .map(this::mapIssueRowToDto)
-                .collect(Collectors.toList());
-
-        GovernanceIssuesPageResponse response = new GovernanceIssuesPageResponse(
-                items,
-                page,
-                safeSize,
-                pageResult.getTotalElements()
-        );
+        var mappedPage = pageResult.map(this::mapIssueRowToDto);
+        PaginatedResponse<GovernanceIssueResponse> response = PaginatedResponse.from(mappedPage, page, safeSize);
 
         log.info("✅ Retornando {} issues (página {}/{})",
-                items.size(), page, pageResult.getTotalPages());
+                mappedPage.getNumberOfElements(), page, pageResult.getTotalPages());
 
         return ResponseEntity.ok(response);
     }
@@ -373,7 +363,7 @@ public class GovernanceApiController {
      */
     @GetMapping("/manuals")
     @Transactional(readOnly = true)
-    public ResponseEntity<PageResponseDto<GovernanceManualDto>> getManuals(
+    public ResponseEntity<PaginatedResponse<GovernanceManualDto>> getManuals(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String system,
@@ -383,11 +373,18 @@ public class GovernanceApiController {
         log.info("GET /api/v1/governance/manuals?page={}&size={}&system={}&status={}&q={}",
                 page, size, system, status, query);
 
-        PageResponseDto<GovernanceManualDto> response = governanceService.listManuals(page, size, system, status, query);
+        var response = governanceService.listManuals(page, size, system, status, query);
+        PaginatedResponse<GovernanceManualDto> paginatedResponse = new PaginatedResponse<>(
+                response.items(),
+                response.page(),
+                response.size(),
+                response.totalElements(),
+                response.totalPages()
+        );
 
         log.info("✅ Manuais: totalItems={} totalPages={}", response.totalElements(), response.totalPages());
 
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(paginatedResponse);
     }
 
     /**

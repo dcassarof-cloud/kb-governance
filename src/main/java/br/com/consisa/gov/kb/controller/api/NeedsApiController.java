@@ -3,7 +3,7 @@ package br.com.consisa.gov.kb.controller.api;
 import br.com.consisa.gov.kb.controller.api.dto.NeedActionRequest;
 import br.com.consisa.gov.kb.controller.api.dto.NeedResponse;
 import br.com.consisa.gov.kb.controller.api.dto.RecurringNeedItemResponse;
-import br.com.consisa.gov.kb.controller.api.dto.RecurringNeedsPageResponse;
+import br.com.consisa.gov.kb.controller.api.dto.PaginatedResponse;
 import br.com.consisa.gov.kb.service.MovideskTicketService;
 import br.com.consisa.gov.kb.domain.DetectedNeed;
 import br.com.consisa.gov.kb.domain.FaqCluster;
@@ -160,11 +160,12 @@ public class NeedsApiController {
             int toIndex = Math.min(items.size(), fromIndex + safeSize);
             List<RecurringNeedItemResponse> pageItems = items.subList(fromIndex, toIndex);
 
-            RecurringNeedsPageResponse response = new RecurringNeedsPageResponse(
+            PaginatedResponse<RecurringNeedItemResponse> response = new PaginatedResponse<>(
                     pageItems,
                     safePage,
                     safeSize,
-                    items.size()
+                    items.size(),
+                    (int) Math.ceil((double) items.size() / safeSize)
             );
 
             return ResponseEntity.ok(response);

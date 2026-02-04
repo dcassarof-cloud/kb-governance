@@ -82,11 +82,11 @@ public class GovernanceTasksApiController {
                 .collect(Collectors.toList());
 
         PaginatedResponse<GovernanceTaskResponse> response = new PaginatedResponse<>(
+                items,
                 page,
                 safeSize,
                 pageResult.getTotalElements(),
-                pageResult.getTotalPages(),
-                items
+                pageResult.getTotalPages()
         );
 
         return ResponseEntity.ok(response);

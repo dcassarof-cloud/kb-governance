@@ -273,7 +273,7 @@ public class GovernanceLanguageService {
             return null;
         }
         try {
-            return syncModeLabel(SyncMode.valueOf(code));
+            return syncModeLabel(SyncMode.fromJson(code));
         } catch (IllegalArgumentException ex) {
             return buildLabel(code, humanize(code), "Modo de análise.", "gray", DEFAULT_IMPACT_SUMMARY, DEFAULT_BUSINESS_IMPACT_LEVEL);
         }
@@ -285,7 +285,7 @@ public class GovernanceLanguageService {
         }
         return switch (mode) {
             case FULL -> buildLabel(mode.name(), "Análise Completa", "Processa todo o histórico.", "blue", DEFAULT_IMPACT_SUMMARY, DEFAULT_BUSINESS_IMPACT_LEVEL);
-            case DELTA_WINDOW -> buildLabel(mode.name(), "Análise Parcial (Últimas Alterações)", "Processa apenas mudanças recentes.", "teal", DEFAULT_IMPACT_SUMMARY, DEFAULT_BUSINESS_IMPACT_LEVEL);
+            case DELTA -> buildLabel(mode.name(), "Análise Parcial (Últimas Alterações)", "Processa apenas mudanças recentes.", "teal", DEFAULT_IMPACT_SUMMARY, DEFAULT_BUSINESS_IMPACT_LEVEL);
         };
     }
 

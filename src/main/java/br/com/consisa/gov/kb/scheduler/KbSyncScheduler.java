@@ -27,7 +27,7 @@ import java.time.*;
  * --------------
  * - enabled: liga/desliga scheduler
  * - intervalMinutes: intervalo entre execuções
- * - mode: FULL, DELTA_WINDOW
+ * - mode: FULL, DELTA
  * - daysBack: janela de delta
  *
  * HORÁRIO COMERCIAL:
@@ -123,7 +123,7 @@ public class KbSyncScheduler {
             log.info("⏱️ Scheduler disparando sync. mode={} daysBack={} intervalMin={}",
                     cfg.getMode(), cfg.getDaysBack(), cfg.getIntervalMinutes());
 
-            SyncMode mode = cfg.getMode() == null ? SyncMode.DELTA_WINDOW : cfg.getMode();
+            SyncMode mode = cfg.getMode() == null ? SyncMode.DELTA : cfg.getMode();
             svc.runNow(mode, cfg.getDaysBack());
 
             // Sucesso

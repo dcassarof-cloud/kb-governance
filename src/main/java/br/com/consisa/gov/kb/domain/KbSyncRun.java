@@ -20,7 +20,6 @@ public class KbSyncRun {
     @Column(name = "duration_ms")
     private Long durationMs;
 
-    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private SyncMode mode;
 

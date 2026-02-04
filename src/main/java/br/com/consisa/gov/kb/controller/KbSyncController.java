@@ -20,10 +20,11 @@ public class KbSyncController {
 
     @PostMapping("/run")
     public ResponseEntity<KbSyncRun> run(
-            @RequestParam(defaultValue = "DELTA_WINDOW") SyncMode mode,
+            @RequestParam(defaultValue = "DELTA") String mode,
             @RequestParam(required = false) Integer daysBack
     ) {
-        return ResponseEntity.ok(svc.runNow(mode, daysBack));
+        SyncMode resolvedMode = SyncMode.fromJson(mode);
+        return ResponseEntity.ok(svc.runNow(resolvedMode, daysBack));
     }
 
     @GetMapping("/config")
