@@ -1,9 +1,11 @@
 package br.com.consisa.gov.kb.controller.api;
 
 import br.com.consisa.gov.kb.controller.api.dto.DashboardSummaryResponse;
+import br.com.consisa.gov.kb.controller.api.dto.GovernanceDashboardResponse;
 import br.com.consisa.gov.kb.repository.KbArticleRepository;
 import br.com.consisa.gov.kb.repository.KbGovernanceIssueRepository;
 import br.com.consisa.gov.kb.repository.KbSystemRepository;
+import br.com.consisa.gov.kb.service.GovernanceDashboardService;
 import br.com.consisa.gov.kb.service.GovernanceLanguageService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,17 +33,20 @@ public class DashboardApiController {
     private final KbGovernanceIssueRepository issueRepo;
     private final KbSystemRepository systemRepo;
     private final GovernanceLanguageService languageService;
+    private final GovernanceDashboardService governanceDashboardService;
 
     public DashboardApiController(
             KbArticleRepository articleRepo,
             KbGovernanceIssueRepository issueRepo,
             KbSystemRepository systemRepo,
-            GovernanceLanguageService languageService
+            GovernanceLanguageService languageService,
+            GovernanceDashboardService governanceDashboardService
     ) {
         this.articleRepo = articleRepo;
         this.issueRepo = issueRepo;
         this.systemRepo = systemRepo;
         this.languageService = languageService;
+        this.governanceDashboardService = governanceDashboardService;
     }
 
     /**
@@ -112,5 +117,16 @@ public class DashboardApiController {
                 totalArticles, articlesOk, articlesWithIssues, totalIssues, duplicatesCount);
 
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * GET /api/v1/dashboard/governance
+     *
+     * Dashboard de governança para tomada de decisão.
+     */
+    @GetMapping("/governance")
+    public ResponseEntity<GovernanceDashboardResponse> getGovernanceDashboard() {
+        log.info("GET /api/v1/dashboard/governance");
+        return ResponseEntity.ok(governanceDashboardService.getGovernanceDashboard());
     }
 }

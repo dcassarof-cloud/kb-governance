@@ -14,9 +14,12 @@ import java.util.List;
 public class GovernanceOverviewService {
 
     private final GovernanceOverviewRepository overviewRepository;
+    private final GovernanceHealthScoreCalculator healthScoreCalculator;
 
-    public GovernanceOverviewService(GovernanceOverviewRepository overviewRepository) {
+    public GovernanceOverviewService(GovernanceOverviewRepository overviewRepository,
+                                     GovernanceHealthScoreCalculator healthScoreCalculator) {
         this.overviewRepository = overviewRepository;
+        this.healthScoreCalculator = healthScoreCalculator;
     }
 
     @Transactional(readOnly = true)
@@ -27,7 +30,7 @@ public class GovernanceOverviewService {
                 .stream()
                 .map(this::mapSystemRow)
                 .toList();
-        double healthScore = calculateHealthScore(totals.errorOpen(), totals.warnOpen(), totals.infoOpen());
+        double healthScore = healthScoreCalculator.calculate(totals.errorOpen(), totals.warnOpen(), totals.infoOpen());
         return new GovernanceOverviewResponse(totals, systems, healthScore);
     }
 
@@ -58,7 +61,7 @@ public class GovernanceOverviewService {
         long infoOpen = toLong(row, 5);
         long overdueOpen = toLong(row, 6);
         long unassignedOpen = toLong(row, 7);
-        double healthScore = calculateHealthScore(errorOpen, warnOpen, infoOpen);
+        double healthScore = healthScoreCalculator.calculate(errorOpen, warnOpen, infoOpen);
         return new GovernanceOverviewSystemDto(
                 systemCode,
                 systemName,
@@ -88,10 +91,5 @@ public class GovernanceOverviewService {
             return ((BigInteger) value).longValue();
         }
         return Long.parseLong(value.toString());
-    }
-
-    private double calculateHealthScore(long errorOpen, long warnOpen, long infoOpen) {
-        double impact = (errorOpen * 5.0) + (warnOpen * 3.0) + (infoOpen * 1.0);
-        return Math.max(0.0, 100.0 - impact);
     }
 }
