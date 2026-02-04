@@ -1,6 +1,5 @@
 package br.com.consisa.gov.kb.controller.api;
 
-import br.com.consisa.gov.kb.controller.api.dto.MovideskErrorResponse;
 import br.com.consisa.gov.kb.controller.api.dto.NeedActionRequest;
 import br.com.consisa.gov.kb.controller.api.dto.NeedResponse;
 import br.com.consisa.gov.kb.controller.api.dto.RecurringNeedItemResponse;
@@ -15,11 +14,13 @@ import br.com.consisa.gov.kb.repository.RecurrenceRuleRepository;
 import br.com.consisa.gov.kb.service.NeedService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -41,6 +42,9 @@ public class NeedsApiController {
     private final RecurrenceRuleRepository ruleRepository;
     private final NeedService needService;
     private final MovideskTicketService movideskTicketService;
+
+    @Value("${movidesk.token:}")
+    private String movideskToken;
 
     public NeedsApiController(
             DetectedNeedRepository needRepository,
@@ -90,26 +94,32 @@ public class NeedsApiController {
 
     @GetMapping("/recurring")
     public ResponseEntity<?> listRecurringNeeds(
-            @RequestParam String start,
-            @RequestParam String end,
+            @RequestParam(required = false) String start,
+            @RequestParam(required = false) String end,
             @RequestParam(required = false) String systemCode,
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "20") int size
+            @RequestParam(defaultValue = "20") int size,
+            HttpServletRequest request
     ) {
-        if (start == null || start.isBlank() || end == null || end.isBlank()) {
-            throw new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,
-                    "Parâmetros start e end são obrigatórios.");
+        String requestId = resolveRequestId(request);
+        log.info("GET /api/v1/needs/recurring requestId={} start={} end={} systemCode={}",
+                requestId, start, end, systemCode);
+
+        if (movideskToken == null || movideskToken.isBlank()) {
+            log.error("❌ requestId={} Movidesk token não configurado.", requestId);
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Movidesk token não configurado.");
         }
 
-        LocalDate startDate;
-        LocalDate endDate;
-        try {
-            startDate = LocalDate.parse(start);
-            endDate = LocalDate.parse(end);
-        } catch (DateTimeParseException ex) {
-            throw new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,
-                    "Formato de data inválido. Use YYYY-MM-DD.");
+        LocalDate endDate = parseDateParam("end", end);
+        if (endDate == null) {
+            endDate = LocalDate.now(ZoneOffset.UTC);
+        }
+
+        LocalDate startDate = parseDateParam("start", start);
+        if (startDate == null) {
+            startDate = endDate.minusDays(30);
         }
 
         if (endDate.isBefore(startDate)) {
@@ -158,11 +168,13 @@ public class NeedsApiController {
             );
 
             return ResponseEntity.ok(response);
+        } catch (ResponseStatusException | IllegalArgumentException ex) {
+            throw ex;
         } catch (Exception ex) {
             String details = safeMovideskDetails(ex);
-            log.warn("⚠️ Falha ao consultar Movidesk recorrência: {}", details);
-            return ResponseEntity.status(502)
-                    .body(new MovideskErrorResponse("Falha ao consultar Movidesk", details));
+            log.warn("⚠️ requestId={} Falha ao consultar Movidesk recorrência: {}", requestId, details, ex);
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.BAD_GATEWAY,
+                    "Falha ao consultar Movidesk", ex);
         }
     }
 
@@ -195,5 +207,28 @@ public class NeedsApiController {
             return ex.getClass().getSimpleName();
         }
         return TOKEN_PATTERN.matcher(message).replaceAll("token=***");
+    }
+
+    private LocalDate parseDateParam(String name, String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(value);
+        } catch (DateTimeParseException ex) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,
+                    "Formato de data inválido para " + name + ". Use YYYY-MM-DD.");
+        }
+    }
+
+    private String resolveRequestId(HttpServletRequest request) {
+        if (request == null) {
+            return "unknown";
+        }
+        String requestId = request.getHeader("x-request-id");
+        if (requestId == null || requestId.isBlank()) {
+            requestId = request.getHeader("x-correlation-id");
+        }
+        return requestId != null ? requestId : "unknown";
     }
 }

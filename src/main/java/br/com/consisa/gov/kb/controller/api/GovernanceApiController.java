@@ -15,6 +15,7 @@ import br.com.consisa.gov.kb.controller.api.dto.SuggestedAssigneeResponse;
 import br.com.consisa.gov.kb.dto.DuplicateGroupDto;
 import br.com.consisa.gov.kb.dto.GovernanceManualDto;
 import br.com.consisa.gov.kb.dto.PageResponseDto;
+import br.com.consisa.gov.kb.domain.GovernanceSeverity;
 import br.com.consisa.gov.kb.domain.GovernanceIssueStatus;
 import br.com.consisa.gov.kb.domain.GovernanceResponsibleType;
 import br.com.consisa.gov.kb.domain.KbArticle;
@@ -22,6 +23,7 @@ import br.com.consisa.gov.kb.domain.KbGovernanceIssue;
 import br.com.consisa.gov.kb.domain.KbGovernanceIssueType;
 import br.com.consisa.gov.kb.repository.KbArticleRepository;
 import br.com.consisa.gov.kb.repository.KbGovernanceIssueRepository;
+import br.com.consisa.gov.kb.repository.KbSystemRepository;
 import br.com.consisa.gov.kb.service.GovernanceService;
 import br.com.consisa.gov.kb.service.GovernanceAssigneeService;
 import br.com.consisa.gov.kb.service.GovernanceLanguageService;
@@ -36,8 +38,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import jakarta.servlet.http.HttpServletRequest;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 import static org.springframework.http.HttpStatus.BAD_REQUEST;
@@ -67,6 +71,7 @@ public class GovernanceApiController {
     private final GovernanceOverviewService overviewService;
     private final IssueTypeMetaRegistry issueTypeMetaRegistry;
     private final GovernanceLanguageService languageService;
+    private final KbSystemRepository systemRepository;
 
     public GovernanceApiController(
             KbGovernanceIssueRepository issueRepo,
@@ -76,7 +81,8 @@ public class GovernanceApiController {
             GovernanceAssigneeService assigneeService,
             GovernanceOverviewService overviewService,
             IssueTypeMetaRegistry issueTypeMetaRegistry,
-            GovernanceLanguageService languageService
+            GovernanceLanguageService languageService,
+            KbSystemRepository systemRepository
     ) {
         this.issueRepo = issueRepo;
         this.articleRepo = articleRepo;
@@ -86,6 +92,7 @@ public class GovernanceApiController {
         this.overviewService = overviewService;
         this.issueTypeMetaRegistry = issueTypeMetaRegistry;
         this.languageService = languageService;
+        this.systemRepository = systemRepository;
     }
 
     /**
@@ -96,7 +103,8 @@ public class GovernanceApiController {
     @Transactional(readOnly = true)
     public ResponseEntity<GovernanceIssuesPageResponse> getGovernance(
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "10") int size
+            @RequestParam(defaultValue = "10") int size,
+            HttpServletRequest request
     ) {
         log.info("GET /api/v1/governance (redirecting to /issues)");
         return getIssues(
@@ -113,7 +121,8 @@ public class GovernanceApiController {
                 null,
                 null,
                 null,
-                null
+                null,
+                request
         );
     }
 
@@ -148,10 +157,12 @@ public class GovernanceApiController {
             @RequestParam(required = false) String responsibleType,
             @RequestParam(required = false) String responsibleId,
             @RequestParam(required = false) Boolean overdue,
-            @RequestParam(required = false) Boolean unassigned
+            @RequestParam(required = false) Boolean unassigned,
+            HttpServletRequest request
     ) {
-        log.info("GET /api/v1/governance/issues?page={}&size={}&type={}&issueType={}&status={}&systemCode={}&assigned={}",
-                page, size, type, issueType, status, systemCode, assigned);
+        String requestId = resolveRequestId(request);
+        log.info("GET /api/v1/governance/issues requestId={} page={} size={} type={} issueType={} status={} systemCode={} assigned={}",
+                requestId, page, size, type, issueType, status, systemCode, assigned);
 
         // Converte page de 1-based para 0-based
         int pageIndex = Math.max(0, page - 1);
@@ -161,16 +172,20 @@ public class GovernanceApiController {
         // Usa query com filtros se type ou status foram informados
         // Passa null para filtros vazios ou em branco
         String rawType = (issueType != null && !issueType.isBlank()) ? issueType : type;
-        String filterType = (rawType != null && !rawType.isBlank()) ? rawType : null;
-        String filterSeverity = (severity != null && !severity.isBlank()) ? severity : null;
-        String filterStatus = (status != null && !status.isBlank()) ? status : null;
-        String filterSystemCode = (systemCode != null && !systemCode.isBlank()) ? systemCode : null;
+        String filterType = parseIssueTypeFilter(rawType);
+        String filterSeverity = parseSeverityFilter(severity);
+        String filterStatus = parseStatusFilter(status);
+        String filterSystemCode = normalizeSystemCode(systemCode);
         String rawAssigned = (assigned != null && !assigned.isBlank()) ? assigned : responsible;
         String filterResponsible = (responsibleId != null && !responsibleId.isBlank())
                 ? responsibleId
                 : ((rawAssigned != null && !rawAssigned.isBlank()) ? rawAssigned : null);
         String filterResponsibleType = (responsibleType != null && !responsibleType.isBlank()) ? responsibleType : null;
         String filterQuery = (query != null && !query.isBlank()) ? query.trim() : null;
+
+        if (filterSystemCode != null && systemRepository.findByCode(filterSystemCode).isEmpty()) {
+            throw new ResponseStatusException(BAD_REQUEST, "systemCode inválido");
+        }
 
         var pageResult = (filterType != null || filterStatus != null || filterSeverity != null
                 || filterSystemCode != null || filterResponsible != null || filterResponsibleType != null
@@ -511,6 +526,46 @@ public class GovernanceApiController {
         }
     }
 
+    private String parseStatusFilter(String status) {
+        if (status == null || status.isBlank()) {
+            return null;
+        }
+        try {
+            return GovernanceIssueStatus.valueOf(status.trim().toUpperCase(Locale.ROOT)).name();
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(BAD_REQUEST, "Status inválido: " + status);
+        }
+    }
+
+    private String parseIssueTypeFilter(String type) {
+        if (type == null || type.isBlank()) {
+            return null;
+        }
+        try {
+            return KbGovernanceIssueType.valueOf(type.trim().toUpperCase(Locale.ROOT)).name();
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(BAD_REQUEST, "Tipo de issue inválido: " + type);
+        }
+    }
+
+    private String parseSeverityFilter(String severity) {
+        if (severity == null || severity.isBlank()) {
+            return null;
+        }
+        try {
+            return GovernanceSeverity.valueOf(severity.trim().toUpperCase(Locale.ROOT)).name();
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(BAD_REQUEST, "Severidade inválida: " + severity);
+        }
+    }
+
+    private String normalizeSystemCode(String systemCode) {
+        if (systemCode == null || systemCode.isBlank()) {
+            return null;
+        }
+        return systemCode.trim().toUpperCase(Locale.ROOT);
+    }
+
     private GovernanceResponsibleType parseResponsibleType(String responsibleType) {
         if (responsibleType == null || responsibleType.isBlank()) {
             return GovernanceResponsibleType.USER;
@@ -546,5 +601,16 @@ public class GovernanceApiController {
         } catch (IllegalArgumentException ex) {
             return null;
         }
+    }
+
+    private String resolveRequestId(HttpServletRequest request) {
+        if (request == null) {
+            return "unknown";
+        }
+        String requestId = request.getHeader("x-request-id");
+        if (requestId == null || requestId.isBlank()) {
+            requestId = request.getHeader("x-correlation-id");
+        }
+        return requestId != null ? requestId : "unknown";
     }
 }
