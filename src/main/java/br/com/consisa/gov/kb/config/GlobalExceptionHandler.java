@@ -1,16 +1,17 @@
 package br.com.consisa.gov.kb.config;
 
+import br.com.consisa.gov.kb.exception.IntegrationException;
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import br.com.consisa.gov.kb.exception.IntegrationException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
-import jakarta.servlet.http.HttpServletRequest;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.UUID;
@@ -37,30 +38,26 @@ public class GlobalExceptionHandler {
      * DTO de resposta de erro padronizada.
      */
     public record ErrorResponse(
-            String traceId,
-            int status,
-            String error,
             String message,
-            String path,
-            OffsetDateTime timestamp
+            String details,
+            OffsetDateTime timestamp,
+            String path
     ) {}
 
     /**
      * Handler para IllegalStateException (ex: sync já em execução).
      */
     @ExceptionHandler(IllegalStateException.class)
-    public ResponseEntity<ErrorResponse> handleIllegalState(IllegalStateException ex) {
-        String traceId = generateTraceId();
+    public ResponseEntity<ErrorResponse> handleIllegalState(IllegalStateException ex, HttpServletRequest request) {
+        String requestId = resolveRequestId(request);
 
-        log.warn("⚠️ [{}] IllegalStateException: {}", traceId, ex.getMessage());
+        log.warn("⚠️ [requestId={}] IllegalStateException: {}", requestId, ex.getMessage(), ex);
 
         ErrorResponse response = new ErrorResponse(
-                traceId,
-                HttpStatus.CONFLICT.value(),
-                "Conflict",
+                "Conflito na operação.",
                 ex.getMessage(),
-                null,
-                OffsetDateTime.now(ZoneOffset.UTC)
+                OffsetDateTime.now(ZoneOffset.UTC),
+                requestPath(request)
         );
 
         return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
@@ -70,18 +67,16 @@ public class GlobalExceptionHandler {
      * Handler para IllegalArgumentException (ex: parâmetro inválido).
      */
     @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex) {
-        String traceId = generateTraceId();
+    public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest request) {
+        String requestId = resolveRequestId(request);
 
-        log.warn("⚠️ [{}] IllegalArgumentException: {}", traceId, ex.getMessage());
+        log.warn("⚠️ [requestId={}] IllegalArgumentException: {}", requestId, ex.getMessage(), ex);
 
         ErrorResponse response = new ErrorResponse(
-                traceId,
-                HttpStatus.BAD_REQUEST.value(),
-                "Bad Request",
+                "Parâmetro inválido.",
                 ex.getMessage(),
-                null,
-                OffsetDateTime.now(ZoneOffset.UTC)
+                OffsetDateTime.now(ZoneOffset.UTC),
+                requestPath(request)
         );
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
@@ -92,9 +87,9 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> handleHttpMessageNotReadable(HttpMessageNotReadableException ex, HttpServletRequest request) {
-        String traceId = generateTraceId();
+        String requestId = resolveRequestId(request);
 
-        log.warn("⚠️ [{}] HttpMessageNotReadableException: {}", traceId, ex.getMessage());
+        log.warn("⚠️ [requestId={}] HttpMessageNotReadableException: {}", requestId, ex.getMessage(), ex);
 
         String message = "Formato inválido para o corpo da requisição.";
         String details = ex.getMessage();
@@ -103,12 +98,10 @@ public class GlobalExceptionHandler {
         }
 
         ErrorResponse response = new ErrorResponse(
-                traceId,
-                HttpStatus.BAD_REQUEST.value(),
-                "Bad Request",
                 message,
-                request != null ? request.getRequestURI() : null,
-                OffsetDateTime.now(ZoneOffset.UTC)
+                details,
+                OffsetDateTime.now(ZoneOffset.UTC),
+                requestPath(request)
         );
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
@@ -119,17 +112,15 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ErrorResponse> handleNoResourceFound(NoResourceFoundException ex, HttpServletRequest request) {
-        String traceId = generateTraceId();
+        String requestId = resolveRequestId(request);
 
-        log.warn("⚠️ [{}] Recurso não encontrado: {}", traceId, ex.getMessage());
+        log.warn("⚠️ [requestId={}] Recurso não encontrado: {}", requestId, ex.getMessage(), ex);
 
         ErrorResponse response = new ErrorResponse(
-                traceId,
-                HttpStatus.NOT_FOUND.value(),
-                "Not Found",
                 "Recurso não encontrado",
-                request != null ? request.getRequestURI() : null,
-                OffsetDateTime.now(ZoneOffset.UTC)
+                ex.getMessage(),
+                OffsetDateTime.now(ZoneOffset.UTC),
+                requestPath(request)
         );
 
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
@@ -141,23 +132,42 @@ public class GlobalExceptionHandler {
      * REGRA: Erro real deve retornar HTTP 500, não lista vazia.
      */
     @ExceptionHandler(IntegrationException.class)
-    public ResponseEntity<ErrorResponse> handleIntegrationException(IntegrationException ex) {
-        String traceId = generateTraceId();
+    public ResponseEntity<ErrorResponse> handleIntegrationException(IntegrationException ex, HttpServletRequest request) {
+        String requestId = resolveRequestId(request);
 
-        log.warn("⚠️ [{}] Erro de integração: {}", traceId, ex.getMessage());
+        log.warn("⚠️ [requestId={}] Erro de integração: {}", requestId, ex.getMessage(), ex);
 
         HttpStatus status = ex.getStatus() != null ? ex.getStatus() : HttpStatus.BAD_GATEWAY;
 
         ErrorResponse response = new ErrorResponse(
-                traceId,
-                status.value(),
-                status.getReasonPhrase(),
                 ex.getMessage(),
-                null,
-                OffsetDateTime.now(ZoneOffset.UTC)
+                "Falha ao comunicar com serviço externo.",
+                OffsetDateTime.now(ZoneOffset.UTC),
+                requestPath(request)
         );
 
         return ResponseEntity.status(status).body(response);
+    }
+
+    /**
+     * Handler para ResponseStatusException (400/404/502/etc).
+     */
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleResponseStatus(ResponseStatusException ex, HttpServletRequest request) {
+        String requestId = resolveRequestId(request);
+        HttpStatus status = HttpStatus.resolve(ex.getStatusCode().value());
+        HttpStatus resolved = status != null ? status : HttpStatus.INTERNAL_SERVER_ERROR;
+
+        log.warn("⚠️ [requestId={}] ResponseStatusException {}: {}", requestId, resolved, ex.getReason(), ex);
+
+        ErrorResponse response = new ErrorResponse(
+                ex.getReason() != null ? ex.getReason() : resolved.getReasonPhrase(),
+                ex.getMessage(),
+                OffsetDateTime.now(ZoneOffset.UTC),
+                requestPath(request)
+        );
+
+        return ResponseEntity.status(resolved).body(response);
     }
 
     /**
@@ -166,20 +176,18 @@ public class GlobalExceptionHandler {
      * REGRA: Erro real deve retornar HTTP 500, não lista vazia.
      */
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponse> handleGenericException(Exception ex) {
-        String traceId = generateTraceId();
+    public ResponseEntity<ErrorResponse> handleGenericException(Exception ex, HttpServletRequest request) {
+        String requestId = resolveRequestId(request);
 
         // Log completo com stack trace para debug no servidor
-        log.error("❌ [{}] Erro não tratado: {}", traceId, ex.getMessage(), ex);
+        log.error("❌ [requestId={}] Erro não tratado: {}", requestId, ex.getMessage(), ex);
 
         // Resposta resumida para o cliente (sem expor detalhes internos)
         ErrorResponse response = new ErrorResponse(
-                traceId,
-                HttpStatus.INTERNAL_SERVER_ERROR.value(),
-                "Internal Server Error",
-                "Erro interno do servidor. TraceId: " + traceId,
-                null,
-                OffsetDateTime.now(ZoneOffset.UTC)
+                "Erro interno do servidor.",
+                "Erro inesperado. requestId=" + requestId,
+                OffsetDateTime.now(ZoneOffset.UTC),
+                requestPath(request)
         );
 
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
@@ -191,5 +199,20 @@ public class GlobalExceptionHandler {
      */
     private String generateTraceId() {
         return UUID.randomUUID().toString().substring(0, 8);
+    }
+
+    private String resolveRequestId(HttpServletRequest request) {
+        if (request == null) {
+            return generateTraceId();
+        }
+        String requestId = request.getHeader("x-request-id");
+        if (requestId == null || requestId.isBlank()) {
+            requestId = request.getHeader("x-correlation-id");
+        }
+        return (requestId == null || requestId.isBlank()) ? generateTraceId() : requestId;
+    }
+
+    private String requestPath(HttpServletRequest request) {
+        return request != null ? request.getRequestURI() : null;
     }
 }
