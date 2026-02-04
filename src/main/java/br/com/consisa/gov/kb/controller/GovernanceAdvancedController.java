@@ -7,6 +7,7 @@ import br.com.consisa.gov.kb.service.KbGovernanceReportService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -37,7 +38,7 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/kb/governance/advanced")
-@CrossOrigin(origins = "*")
+@PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
 public class GovernanceAdvancedController {
 
     private static final Logger log = LoggerFactory.getLogger(GovernanceAdvancedController.class);

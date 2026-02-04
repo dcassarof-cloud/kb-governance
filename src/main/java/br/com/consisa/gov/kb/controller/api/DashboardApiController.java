@@ -10,6 +10,7 @@ import br.com.consisa.gov.kb.service.GovernanceLanguageService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -24,7 +25,7 @@ import java.util.stream.Collectors;
  */
 @RestController
 @RequestMapping("/api/v1/dashboard")
-@CrossOrigin(origins = "*")
+@PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
 public class DashboardApiController {
 
     private static final Logger log = LoggerFactory.getLogger(DashboardApiController.class);

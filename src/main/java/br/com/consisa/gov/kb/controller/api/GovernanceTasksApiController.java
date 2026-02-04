@@ -10,6 +10,7 @@ import br.com.consisa.gov.kb.service.GovernanceLanguageService;
 import br.com.consisa.gov.kb.service.KbManualTaskService;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,7 +24,7 @@ import static br.com.consisa.gov.kb.util.DateTimeUtils.toOffsetDateTimeOrNull;
 
 @RestController
 @RequestMapping("/api/v1/governance")
-@CrossOrigin(origins = "*")
+@PreAuthorize("hasAnyRole('ADMIN','MANAGER','ANALYST')")
 public class GovernanceTasksApiController {
 
     private final KbManualTaskService taskService;

@@ -6,6 +6,7 @@ import br.com.consisa.gov.kb.service.KbAssignmentService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.OffsetDateTime;
@@ -34,7 +35,7 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/kb")
-@CrossOrigin(origins = "*")
+@PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
 public class KbAssignmentController {
 
     private static final Logger log = LoggerFactory.getLogger(KbAssignmentController.class);
