@@ -1,7 +1,11 @@
 package br.com.consisa.gov.kb.controller.api;
 
+import br.com.consisa.gov.kb.controller.api.dto.MovideskErrorResponse;
 import br.com.consisa.gov.kb.controller.api.dto.NeedActionRequest;
 import br.com.consisa.gov.kb.controller.api.dto.NeedResponse;
+import br.com.consisa.gov.kb.controller.api.dto.RecurringNeedItemResponse;
+import br.com.consisa.gov.kb.controller.api.dto.RecurringNeedsPageResponse;
+import br.com.consisa.gov.kb.service.MovideskTicketService;
 import br.com.consisa.gov.kb.domain.DetectedNeed;
 import br.com.consisa.gov.kb.domain.FaqCluster;
 import br.com.consisa.gov.kb.domain.RecurrenceRule;
@@ -9,32 +13,47 @@ import br.com.consisa.gov.kb.repository.DetectedNeedRepository;
 import br.com.consisa.gov.kb.repository.FaqClusterRepository;
 import br.com.consisa.gov.kb.repository.RecurrenceRuleRepository;
 import br.com.consisa.gov.kb.service.NeedService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeParseException;
 import java.util.List;
+import java.util.Locale;
+import java.util.regex.Pattern;
 
 @RestController
 @RequestMapping("/api/v1/needs")
 @CrossOrigin(origins = "*")
 public class NeedsApiController {
 
+    private static final Logger log = LoggerFactory.getLogger(NeedsApiController.class);
+    private static final Pattern TOKEN_PATTERN = Pattern.compile("token=([^&\\s]+)");
+
     private final DetectedNeedRepository needRepository;
     private final FaqClusterRepository clusterRepository;
     private final RecurrenceRuleRepository ruleRepository;
     private final NeedService needService;
+    private final MovideskTicketService movideskTicketService;
 
     public NeedsApiController(
             DetectedNeedRepository needRepository,
             FaqClusterRepository clusterRepository,
             RecurrenceRuleRepository ruleRepository,
-            NeedService needService
+            NeedService needService,
+            MovideskTicketService movideskTicketService
     ) {
         this.needRepository = needRepository;
         this.clusterRepository = clusterRepository;
         this.ruleRepository = ruleRepository;
         this.needService = needService;
+        this.movideskTicketService = movideskTicketService;
     }
 
     @GetMapping
@@ -69,6 +88,84 @@ public class NeedsApiController {
         return ResponseEntity.ok(mapNeed(need));
     }
 
+    @GetMapping("/recurring")
+    public ResponseEntity<?> listRecurringNeeds(
+            @RequestParam String start,
+            @RequestParam String end,
+            @RequestParam(required = false) String systemCode,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        if (start == null || start.isBlank() || end == null || end.isBlank()) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,
+                    "Parâmetros start e end são obrigatórios.");
+        }
+
+        LocalDate startDate;
+        LocalDate endDate;
+        try {
+            startDate = LocalDate.parse(start);
+            endDate = LocalDate.parse(end);
+        } catch (DateTimeParseException ex) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,
+                    "Formato de data inválido. Use YYYY-MM-DD.");
+        }
+
+        if (endDate.isBefore(startDate)) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,
+                    "Parâmetro end deve ser maior ou igual a start.");
+        }
+
+        OffsetDateTime startAt = startDate.atStartOfDay().atOffset(ZoneOffset.UTC);
+        OffsetDateTime endAt = endDate.plusDays(1).atStartOfDay().minusNanos(1).atOffset(ZoneOffset.UTC);
+
+        String normalizedStatus = status != null ? status.trim().toLowerCase(Locale.ROOT) : null;
+        String normalizedSystem = systemCode != null ? systemCode.trim().toLowerCase(Locale.ROOT) : null;
+
+        try {
+            List<RecurringNeedItemResponse> items = needService.fetchRecurringTickets(startAt, endAt)
+                    .stream()
+                    .filter(ticket -> normalizedStatus == null
+                            || (ticket.getStatus() != null
+                            && ticket.getStatus().toLowerCase(Locale.ROOT).contains(normalizedStatus)))
+                    .filter(ticket -> normalizedSystem == null || matchesSystemCode(ticket.getSubject(), normalizedSystem))
+                    .map(ticket -> new RecurringNeedItemResponse(
+                            ticket.getProtocol() != null ? ticket.getProtocol() : ticket.getId(),
+                            ticket.getSubject(),
+                            ticket.getStatus(),
+                            ticket.getCreatedDate() != null
+                                    ? ticket.getCreatedDate().atOffset(ZoneOffset.UTC)
+                                    : null,
+                            null,
+                            systemCode,
+                            null,
+                            ticket.getId() != null ? movideskTicketService.buildTicketUrl(ticket.getId()) : null
+                    ))
+                    .toList();
+
+            int safeSize = Math.max(1, Math.min(size, 100));
+            int safePage = Math.max(1, page);
+            int fromIndex = Math.min(items.size(), (safePage - 1) * safeSize);
+            int toIndex = Math.min(items.size(), fromIndex + safeSize);
+            List<RecurringNeedItemResponse> pageItems = items.subList(fromIndex, toIndex);
+
+            RecurringNeedsPageResponse response = new RecurringNeedsPageResponse(
+                    pageItems,
+                    safePage,
+                    safeSize,
+                    items.size()
+            );
+
+            return ResponseEntity.ok(response);
+        } catch (Exception ex) {
+            String details = safeMovideskDetails(ex);
+            log.warn("⚠️ Falha ao consultar Movidesk recorrência: {}", details);
+            return ResponseEntity.status(502)
+                    .body(new MovideskErrorResponse("Falha ao consultar Movidesk", details));
+        }
+    }
+
     private NeedResponse mapNeed(DetectedNeed need) {
         FaqCluster cluster = clusterRepository.findById(need.getClusterId()).orElse(null);
         RecurrenceRule rule = ruleRepository.findById(need.getRuleId()).orElse(null);
@@ -83,5 +180,20 @@ public class NeedsApiController {
                 rule != null ? rule.getName() : null,
                 need.getExternalTicketId()
         );
+    }
+
+    private boolean matchesSystemCode(String subject, String systemCode) {
+        if (subject == null || systemCode == null) {
+            return false;
+        }
+        return subject.toLowerCase(Locale.ROOT).contains(systemCode);
+    }
+
+    private String safeMovideskDetails(Exception ex) {
+        String message = ex.getMessage();
+        if (message == null) {
+            return ex.getClass().getSimpleName();
+        }
+        return TOKEN_PATTERN.matcher(message).replaceAll("token=***");
     }
 }

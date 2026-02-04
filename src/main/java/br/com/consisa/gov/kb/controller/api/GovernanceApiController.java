@@ -1,17 +1,17 @@
 package br.com.consisa.gov.kb.controller.api;
 
-import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueAssignmentResponse;
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueAssignResponsibleRequest;
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueAssignRequest;
-import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueHistoryResponse;
+import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueHistoryItemResponse;
+import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueHistoryListResponse;
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueIgnoreRequest;
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueResponse;
+import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueStatusResponse;
+import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueStatusUpdateRequest;
+import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssuesPageResponse;
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceOverviewResponse;
 import br.com.consisa.gov.kb.controller.api.dto.ResponsibleSummaryDto;
 import br.com.consisa.gov.kb.controller.api.dto.SuggestedAssigneeResponse;
-import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueStatusResponse;
-import br.com.consisa.gov.kb.controller.api.dto.GovernanceIssueStatusUpdateRequest;
-import br.com.consisa.gov.kb.controller.api.dto.PaginatedResponse;
 import br.com.consisa.gov.kb.dto.DuplicateGroupDto;
 import br.com.consisa.gov.kb.dto.GovernanceManualDto;
 import br.com.consisa.gov.kb.dto.PageResponseDto;
@@ -36,10 +36,12 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
 import static org.springframework.http.HttpStatus.BAD_REQUEST;
+import static org.springframework.http.HttpStatus.NOT_FOUND;
 import static br.com.consisa.gov.kb.util.DateTimeUtils.toOffsetDateTime;
 import static br.com.consisa.gov.kb.util.DateTimeUtils.toOffsetDateTimeOrNull;
 
@@ -92,7 +94,7 @@ public class GovernanceApiController {
      */
     @GetMapping
     @Transactional(readOnly = true)
-    public ResponseEntity<PaginatedResponse<GovernanceIssueResponse>> getGovernance(
+    public ResponseEntity<GovernanceIssuesPageResponse> getGovernance(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
@@ -100,6 +102,7 @@ public class GovernanceApiController {
         return getIssues(
                 page,
                 size,
+                null,
                 null,
                 null,
                 null,
@@ -131,7 +134,7 @@ public class GovernanceApiController {
      */
     @GetMapping("/issues")
     @Transactional(readOnly = true)
-    public ResponseEntity<PaginatedResponse<GovernanceIssueResponse>> getIssues(
+    public ResponseEntity<GovernanceIssuesPageResponse> getIssues(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String type,
@@ -139,6 +142,7 @@ public class GovernanceApiController {
             @RequestParam(required = false) String severity,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String systemCode,
+            @RequestParam(required = false, name = "q") String query,
             @RequestParam(required = false) String assigned,
             @RequestParam(required = false) String responsible,
             @RequestParam(required = false) String responsibleType,
@@ -166,12 +170,13 @@ public class GovernanceApiController {
                 ? responsibleId
                 : ((rawAssigned != null && !rawAssigned.isBlank()) ? rawAssigned : null);
         String filterResponsibleType = (responsibleType != null && !responsibleType.isBlank()) ? responsibleType : null;
+        String filterQuery = (query != null && !query.isBlank()) ? query.trim() : null;
 
         var pageResult = (filterType != null || filterStatus != null || filterSeverity != null
                 || filterSystemCode != null || filterResponsible != null || filterResponsibleType != null
-                || Boolean.TRUE.equals(overdue) || Boolean.TRUE.equals(unassigned))
+                || filterQuery != null || Boolean.TRUE.equals(overdue) || Boolean.TRUE.equals(unassigned))
                 ? issueRepo.pageIssuesFiltered(pageable, filterType, filterSeverity, filterStatus, filterSystemCode,
-                filterResponsible, filterResponsibleType, overdue, unassigned)
+                filterResponsible, filterResponsibleType, filterQuery, overdue, unassigned)
                 : issueRepo.pageIssues(pageable);
 
         log.info("📊 Total de issues (filtros: type={}, status={}, system={}, assigned={}): {}",
@@ -182,12 +187,11 @@ public class GovernanceApiController {
                 .map(this::mapIssueRowToDto)
                 .collect(Collectors.toList());
 
-        PaginatedResponse<GovernanceIssueResponse> response = new PaginatedResponse<>(
-                page,  // retorna page original (1-based)
+        GovernanceIssuesPageResponse response = new GovernanceIssuesPageResponse(
+                items,
+                page,
                 safeSize,
-                pageResult.getTotalElements(),
-                pageResult.getTotalPages(),
-                items
+                pageResult.getTotalElements()
         );
 
         log.info("✅ Retornando {} issues (página {}/{})",
@@ -200,12 +204,12 @@ public class GovernanceApiController {
      * PUT /api/v1/governance/issues/{id}/assign
      */
     @PutMapping("/issues/{id}/assign")
-    public ResponseEntity<GovernanceIssueAssignmentResponse> assignIssueV2(
+    public ResponseEntity<GovernanceIssueResponse> assignIssueV2(
             @PathVariable Long id,
             @RequestBody GovernanceIssueAssignResponsibleRequest request
     ) {
         GovernanceResponsibleType type = parseResponsibleType(request.responsibleType());
-        var assignment = workflowService.assignResponsible(
+        workflowService.assignResponsible(
                 id,
                 type,
                 request.responsibleId(),
@@ -214,15 +218,7 @@ public class GovernanceApiController {
                 request.actor()
         );
 
-        return ResponseEntity.ok(new GovernanceIssueAssignmentResponse(
-                assignment.getId(),
-                assignment.getIssueId(),
-                assignment.getAgentId(),
-                assignment.getAgentName(),
-                languageService.assignmentStatusLabel(assignment.getStatus()),
-                assignment.getAssignedAt(),
-                assignment.getDueDate()
-        ));
+        return ResponseEntity.ok(getIssueResponse(id));
     }
 
     /**
@@ -230,11 +226,11 @@ public class GovernanceApiController {
      */
     @Deprecated
     @PostMapping("/issues/{id}/assign")
-    public ResponseEntity<GovernanceIssueAssignmentResponse> assignIssue(
+    public ResponseEntity<GovernanceIssueResponse> assignIssue(
             @PathVariable Long id,
             @RequestBody GovernanceIssueAssignRequest request
     ) {
-        var assignment = workflowService.assignIssue(
+        workflowService.assignIssue(
                 id,
                 request.agentId(),
                 request.agentName(),
@@ -242,22 +238,14 @@ public class GovernanceApiController {
                 request.actor()
         );
 
-        return ResponseEntity.ok(new GovernanceIssueAssignmentResponse(
-                assignment.getId(),
-                assignment.getIssueId(),
-                assignment.getAgentId(),
-                assignment.getAgentName(),
-                languageService.assignmentStatusLabel(assignment.getStatus()),
-                assignment.getAssignedAt(),
-                assignment.getDueDate()
-        ));
+        return ResponseEntity.ok(getIssueResponse(id));
     }
 
     /**
      * PUT /api/v1/governance/issues/{id}/status
      */
     @PutMapping("/issues/{id}/status")
-    public ResponseEntity<GovernanceIssueStatusResponse> updateIssueStatusV2(
+    public ResponseEntity<GovernanceIssueResponse> updateIssueStatusV2(
             @PathVariable Long id,
             @RequestBody GovernanceIssueStatusUpdateRequest request
     ) {
@@ -269,11 +257,8 @@ public class GovernanceApiController {
                 && (request.ignoredReason() == null || request.ignoredReason().isBlank())) {
             throw new ResponseStatusException(BAD_REQUEST, "Motivo é obrigatório para IGNORED.");
         }
-        var issue = workflowService.updateStatus(id, newStatus, request.actor(), request.ignoredReason());
-        return ResponseEntity.ok(new GovernanceIssueStatusResponse(
-                issue.getId(),
-                languageService.issueStatusLabel(issue.getStatus())
-        ));
+        workflowService.updateStatus(id, newStatus, request.actor(), request.ignoredReason());
+        return ResponseEntity.ok(getIssueResponse(id));
     }
 
     /**
@@ -334,20 +319,27 @@ public class GovernanceApiController {
      */
     @GetMapping("/issues/{id}/history")
     @Transactional(readOnly = true)
-    public ResponseEntity<List<GovernanceIssueHistoryResponse>> getIssueHistory(@PathVariable Long id) {
+    public ResponseEntity<GovernanceIssueHistoryListResponse> getIssueHistory(@PathVariable Long id) {
         var history = workflowService.getHistory(id).stream()
-                .map(item -> new GovernanceIssueHistoryResponse(
-                        item.getId(),
-                        item.getIssueId(),
+                .map(item -> new GovernanceIssueHistoryItemResponse(
                         item.getAction(),
-                        item.getOldValue(),
-                        item.getNewValue(),
                         item.getActor(),
-                        item.getCreatedAt()
+                        item.getCreatedAt(),
+                        item.getOldValue(),
+                        item.getNewValue()
                 ))
                 .toList();
 
-        return ResponseEntity.ok(history);
+        return ResponseEntity.ok(new GovernanceIssueHistoryListResponse(history));
+    }
+
+    /**
+     * GET /api/v1/governance/issues/{id}
+     */
+    @GetMapping("/issues/{id}")
+    @Transactional(readOnly = true)
+    public ResponseEntity<GovernanceIssueResponse> getIssue(@PathVariable Long id) {
+        return ResponseEntity.ok(getIssueResponse(id));
     }
 
     /**
@@ -436,32 +428,24 @@ public class GovernanceApiController {
      * Usa DateTimeUtils.toOffsetDateTime() para conversão centralizada.
      */
     private GovernanceIssueResponse mapIssueRowToDto(KbGovernanceIssueRepository.IssueRow row) {
-        String message = row.getMessage();
         var meta = resolveIssueTypeMeta(row.getIssueType());
+        OffsetDateTime slaDueAt = toOffsetDateTimeOrNull(row.getSlaDueAt());
         return new GovernanceIssueResponse(
                 row.getId(),
-                languageService.issueTypeLabel(row.getIssueType()),
-                languageService.severityLabel(row.getSeverity()),
-                languageService.issueStatusLabel(row.getStatus()),
-                row.getArticleId(),
-                row.getArticleTitle(),
-                row.getSystemCode(),
-                row.getSystemName(),
-                message,
-                toOffsetDateTime(row.getCreatedAt()),  // Instant → OffsetDateTime (UTC)
-                toOffsetDateTimeOrNull(row.getUpdatedAt()),
-                row.getAssignedAgentId(),
-                row.getAssignedAgentName(),
-                toOffsetDateTimeOrNull(row.getDueDate()),
-                message,
-                row.getResponsibleId(),
-                languageService.responsibleTypeLabel(row.getResponsibleType()),
-                toOffsetDateTimeOrNull(row.getSlaDueAt()),
-                toOffsetDateTimeOrNull(row.getResolvedAt()),
-                row.getIgnoredReason(),
+                row.getIssueType(),
                 meta != null ? meta.displayName() : null,
                 meta != null ? meta.description() : null,
-                meta != null ? meta.recommendation() : null
+                meta != null ? meta.recommendation() : null,
+                row.getSystemCode(),
+                row.getSystemName(),
+                row.getStatus(),
+                row.getSeverity(),
+                row.getResponsibleType(),
+                row.getResponsibleId(),
+                slaDueAt,
+                isOverdue(row.getStatus(), slaDueAt),
+                toOffsetDateTime(row.getCreatedAt()),
+                toOffsetDateTimeOrNull(row.getUpdatedAt())
         );
     }
 
@@ -485,38 +469,35 @@ public class GovernanceApiController {
             }
         }
 
-        // Converte evidence JSON para string (simplificado)
-        String details = issue.getMessage();
-        if (issue.getEvidence() != null) {
-            details = issue.getMessage() + " | Evidence: " + issue.getEvidence().toString();
-        }
-
         var meta = issueTypeMetaRegistry.getMeta(issue.getIssueType());
+        OffsetDateTime slaDueAt = issue.getSlaDueAt();
         return new GovernanceIssueResponse(
                 issue.getId(),
-                languageService.issueTypeLabel(issue.getIssueType()),
-                languageService.severityLabel(issue.getSeverity()),
-                languageService.issueStatusLabel(issue.getStatus()),
-                issue.getArticleId(),
-                articleTitle,
-                systemCode,
-                systemName,
-                details,
-                issue.getCreatedAt(),
-                issue.getUpdatedAt(),
-                null,
-                null,
-                null,
-                details,
-                issue.getResponsibleId(),
-                languageService.responsibleTypeLabel(issue.getResponsibleType()),
-                issue.getSlaDueAt(),
-                issue.getResolvedAt(),
-                issue.getIgnoredReason(),
+                issue.getIssueType().name(),
                 meta != null ? meta.displayName() : null,
                 meta != null ? meta.description() : null,
-                meta != null ? meta.recommendation() : null
+                meta != null ? meta.recommendation() : null,
+                systemCode,
+                systemName,
+                issue.getStatus().name(),
+                issue.getSeverity().name(),
+                issue.getResponsibleType() != null ? issue.getResponsibleType().name() : null,
+                issue.getResponsibleId(),
+                slaDueAt,
+                isOverdue(issue.getStatus().name(), slaDueAt),
+                issue.getCreatedAt(),
+                issue.getUpdatedAt()
         );
+    }
+
+    private GovernanceIssueResponse getIssueResponse(Long id) {
+        return issueRepo.findIssueRowById(id)
+                .map(this::mapIssueRowToDto)
+                .orElseGet(() -> {
+                    KbGovernanceIssue issue = issueRepo.findById(id)
+                            .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Issue não encontrada: " + id));
+                    return mapIssueToDto(issue);
+                });
     }
 
     private GovernanceIssueStatus parseStatus(String status) {
@@ -539,6 +520,20 @@ public class GovernanceApiController {
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(BAD_REQUEST, "Tipo de responsável inválido: " + responsibleType);
         }
+    }
+
+    private boolean isOverdue(String status, OffsetDateTime slaDueAt) {
+        if (slaDueAt == null) {
+            return false;
+        }
+        if (status == null) {
+            return false;
+        }
+        String normalized = status.toUpperCase();
+        if ("RESOLVED".equals(normalized) || "IGNORED".equals(normalized)) {
+            return false;
+        }
+        return slaDueAt.isBefore(OffsetDateTime.now());
     }
 
     private IssueTypeMetaRegistry.IssueTypeMeta resolveIssueTypeMeta(String issueType) {

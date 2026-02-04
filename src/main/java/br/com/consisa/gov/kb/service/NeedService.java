@@ -1,5 +1,6 @@
 package br.com.consisa.gov.kb.service;
 
+import br.com.consisa.gov.kb.client.movidesk.MovideskClient;
 import br.com.consisa.gov.kb.client.movidesk.MovideskTicketRequest;
 import br.com.consisa.gov.kb.client.movidesk.MovideskTicketResponse;
 import br.com.consisa.gov.kb.domain.DetectedNeed;
@@ -16,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 
 @Service
 public class NeedService {
@@ -28,6 +30,7 @@ public class NeedService {
     private final FaqClusterRepository clusterRepository;
     private final RecurrenceRuleRepository ruleRepository;
     private final MovideskTicketService movideskTicketService;
+    private final MovideskClient movideskClient;
 
     @Value("${movidesk.ticket.service:Base de Conhecimento}")
     private String ticketService;
@@ -42,12 +45,14 @@ public class NeedService {
             DetectedNeedRepository needRepository,
             FaqClusterRepository clusterRepository,
             RecurrenceRuleRepository ruleRepository,
-            MovideskTicketService movideskTicketService
+            MovideskTicketService movideskTicketService,
+            MovideskClient movideskClient
     ) {
         this.needRepository = needRepository;
         this.clusterRepository = clusterRepository;
         this.ruleRepository = ruleRepository;
         this.movideskTicketService = movideskTicketService;
+        this.movideskClient = movideskClient;
     }
 
     @Transactional(readOnly = true)
@@ -93,6 +98,11 @@ public class NeedService {
         MovideskTicketResponse response = movideskTicketService.createTicket(request);
         need.setExternalTicketId(response.getId());
         return needRepository.save(need);
+    }
+
+    @Transactional(readOnly = true)
+    public List<MovideskTicketResponse> fetchRecurringTickets(OffsetDateTime start, OffsetDateTime end) {
+        return movideskClient.searchTickets(start, end);
     }
 
     private String buildDescription(FaqCluster cluster, RecurrenceRule rule) {

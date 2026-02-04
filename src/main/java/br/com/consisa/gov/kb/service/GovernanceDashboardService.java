@@ -77,7 +77,8 @@ public class GovernanceDashboardService {
         return overviewRepository.fetchOverviewBySystem()
                 .stream()
                 .map(row -> {
-                    String system = resolveSystemLabel(row, 0, 1);
+                    String systemCode = asString(row, 0);
+                    String systemName = asString(row, 1);
                     long errorOpen = toLong(row, 3);
                     long warnOpen = toLong(row, 4);
                     long infoOpen = toLong(row, 5);
@@ -85,7 +86,8 @@ public class GovernanceDashboardService {
                     long unassigned = toLong(row, 7);
                     double healthScore = healthScoreCalculator.calculate(errorOpen, warnOpen, infoOpen);
                     return new GovernanceDashboardResponse.TopRisk(
-                            system,
+                            systemCode != null ? systemCode : "UNCLASSIFIED",
+                            systemName != null ? systemName : "Não classificado",
                             healthScore,
                             errorOpen,
                             overdue,
@@ -104,9 +106,11 @@ public class GovernanceDashboardService {
                 .map(row -> new GovernanceDashboardResponse.OverdueIssue(
                         toLong(row, 0),
                         asString(row, 1),
-                        resolveSystemLabel(row, 2, 3),
+                        asString(row, 2),
+                        asString(row, 3),
                         asString(row, 4),
-                        toOffsetDateTime(row[5])
+                        toOffsetDateTime(row[5]),
+                        toOffsetDateTime(row[6])
                 ))
                 .toList();
 
@@ -116,7 +120,8 @@ public class GovernanceDashboardService {
                 .map(row -> new GovernanceDashboardResponse.UnassignedIssue(
                         toLong(row, 0),
                         asString(row, 1),
-                        resolveSystemLabel(row, 2, 3),
+                        asString(row, 2),
+                        asString(row, 3),
                         asString(row, 4),
                         toOffsetDateTime(row[5])
                 ))
@@ -163,15 +168,6 @@ public class GovernanceDashboardService {
             return null;
         }
         return row[index].toString();
-    }
-
-    private String resolveSystemLabel(Object[] row, int codeIndex, int nameIndex) {
-        String systemCode = asString(row, codeIndex);
-        String systemName = asString(row, nameIndex);
-        if (systemName != null && !systemName.isBlank()) {
-            return systemName;
-        }
-        return systemCode != null ? systemCode : "UNCLASSIFIED";
     }
 
     private OffsetDateTime toOffsetDateTime(Object value) {
