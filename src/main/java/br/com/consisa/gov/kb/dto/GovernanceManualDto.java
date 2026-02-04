@@ -10,7 +10,7 @@ public record GovernanceManualDto(
         String title,
         String systemCode,
         String systemName,
-        String governanceStatus,
+        GovernanceLabelDto governanceStatus,
         Instant updatedAt,
         long issuesCount
 ) {}

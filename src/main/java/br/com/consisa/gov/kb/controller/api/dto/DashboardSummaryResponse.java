@@ -1,5 +1,7 @@
 package br.com.consisa.gov.kb.controller.api.dto;
 
+import br.com.consisa.gov.kb.dto.GovernanceLabelDto;
+
 import java.util.List;
 
 /**
@@ -32,7 +34,7 @@ public record DashboardSummaryResponse(
     ) {}
 
     public record ByStatus(
-            String status,
+            GovernanceLabelDto status,
             long count
     ) {}
 }

@@ -13,7 +13,7 @@ package br.com.consisa.gov.kb.controller.api.dto;
  */
 public record SyncConfigResponse(
         boolean enabled,
-        String mode,
+        br.com.consisa.gov.kb.dto.GovernanceLabelDto mode,
         int intervalMinutes,
         int daysBack
 ) {
