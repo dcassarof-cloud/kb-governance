@@ -4,6 +4,7 @@ import br.com.consisa.gov.kb.controller.api.dto.SupportImportRequest;
 import br.com.consisa.gov.kb.controller.api.dto.SupportImportResponse;
 import br.com.consisa.gov.kb.service.SupportImportService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.OffsetDateTime;
@@ -11,7 +12,7 @@ import java.time.ZoneOffset;
 
 @RestController
 @RequestMapping("/api/v1/support")
-@CrossOrigin(origins = "*")
+@PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
 public class SupportImportApiController {
 
     private final SupportImportService importService;

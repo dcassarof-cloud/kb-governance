@@ -3,6 +3,7 @@ package br.com.consisa.gov.kb.controller;
 import br.com.consisa.gov.kb.domain.KbArticle;
 import br.com.consisa.gov.kb.service.KbArticleSyncService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -22,6 +23,7 @@ public class KbArticleController {
      * POST /kb/articles/{id}/sync
      */
     @PostMapping("/{id}/sync")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
     public ResponseEntity<KbArticle> sync(@PathVariable("id") long id) {
         return ResponseEntity.ok(service.sync(id));
     }
@@ -31,6 +33,7 @@ public class KbArticleController {
      * POST /kb/articles/{id}/assign-system/{code}
      */
     @PostMapping("/{id}/assign-system/{code}")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
     public ResponseEntity<Void> assignSystem(
             @PathVariable long id,
             @PathVariable String code
@@ -44,6 +47,7 @@ public class KbArticleController {
      * GET /kb/articles/unclassified
      */
     @GetMapping("/unclassified")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','ANALYST')")
     public ResponseEntity<List<KbArticle>> unclassified() {
         return ResponseEntity.ok(service.listUnclassified());
     }

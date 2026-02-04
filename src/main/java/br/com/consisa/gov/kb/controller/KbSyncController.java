@@ -6,10 +6,12 @@ import br.com.consisa.gov.kb.domain.KbSyncRun;
 import br.com.consisa.gov.kb.domain.SyncMode;
 import br.com.consisa.gov.kb.service.KbSyncOrchestratorService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/kb/sync")
+@PreAuthorize("hasRole('ADMIN')")
 public class KbSyncController {
 
     private final KbSyncOrchestratorService svc;

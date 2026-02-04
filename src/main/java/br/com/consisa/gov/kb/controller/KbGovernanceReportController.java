@@ -3,6 +3,7 @@ package br.com.consisa.gov.kb.controller;
 import br.com.consisa.gov.kb.dto.KbArticleGovernanceReportDto;
 import br.com.consisa.gov.kb.service.KbGovernanceReportService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -15,6 +16,7 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/kb/governance/report")
+@PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
 public class KbGovernanceReportController {
 
     private final KbGovernanceReportService service;

@@ -23,6 +23,8 @@ import br.com.consisa.gov.kb.domain.KbGovernanceIssueType;
 import br.com.consisa.gov.kb.repository.KbArticleRepository;
 import br.com.consisa.gov.kb.repository.KbGovernanceIssueRepository;
 import br.com.consisa.gov.kb.repository.KbSystemRepository;
+import br.com.consisa.gov.kb.repository.AppUserRepository;
+import br.com.consisa.gov.kb.security.SecurityUtils;
 import br.com.consisa.gov.kb.service.GovernanceService;
 import br.com.consisa.gov.kb.service.GovernanceAssigneeService;
 import br.com.consisa.gov.kb.service.GovernanceLanguageService;
@@ -33,6 +35,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -56,7 +61,7 @@ import static br.com.consisa.gov.kb.util.DateTimeUtils.toOffsetDateTimeOrNull;
  */
 @RestController
 @RequestMapping("/api/v1/governance")
-@CrossOrigin(origins = "*")
+@PreAuthorize("hasAnyRole('ADMIN','MANAGER','ANALYST','AGENT')")
 public class GovernanceApiController {
 
     private static final Logger log = LoggerFactory.getLogger(GovernanceApiController.class);
@@ -70,6 +75,7 @@ public class GovernanceApiController {
     private final IssueTypeMetaRegistry issueTypeMetaRegistry;
     private final GovernanceLanguageService languageService;
     private final KbSystemRepository systemRepository;
+    private final AppUserRepository userRepository;
 
     public GovernanceApiController(
             KbGovernanceIssueRepository issueRepo,
@@ -80,7 +86,8 @@ public class GovernanceApiController {
             GovernanceOverviewService overviewService,
             IssueTypeMetaRegistry issueTypeMetaRegistry,
             GovernanceLanguageService languageService,
-            KbSystemRepository systemRepository
+            KbSystemRepository systemRepository,
+            AppUserRepository userRepository
     ) {
         this.issueRepo = issueRepo;
         this.articleRepo = articleRepo;
@@ -91,6 +98,7 @@ public class GovernanceApiController {
         this.issueTypeMetaRegistry = issueTypeMetaRegistry;
         this.languageService = languageService;
         this.systemRepository = systemRepository;
+        this.userRepository = userRepository;
     }
 
     /**
@@ -99,6 +107,7 @@ public class GovernanceApiController {
      */
     @GetMapping
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','ANALYST','AGENT')")
     public ResponseEntity<PaginatedResponse<GovernanceIssueResponse>> getGovernance(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size,
@@ -141,6 +150,7 @@ public class GovernanceApiController {
      */
     @GetMapping("/issues")
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','ANALYST','AGENT')")
     public ResponseEntity<PaginatedResponse<GovernanceIssueResponse>> getIssues(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size,
@@ -185,6 +195,10 @@ public class GovernanceApiController {
             throw new ResponseStatusException(BAD_REQUEST, "systemCode inválido");
         }
 
+        if (isAgent()) {
+            filterResponsible = resolveAgentId();
+        }
+
         var pageResult = (filterType != null || filterStatus != null || filterSeverity != null
                 || filterSystemCode != null || filterResponsible != null || filterResponsibleType != null
                 || filterQuery != null || Boolean.TRUE.equals(overdue) || Boolean.TRUE.equals(unassigned))
@@ -209,6 +223,7 @@ public class GovernanceApiController {
      * PUT /api/v1/governance/issues/{id}/assign
      */
     @PutMapping("/issues/{id}/assign")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','ANALYST')")
     public ResponseEntity<GovernanceIssueResponse> assignIssueV2(
             @PathVariable Long id,
             @RequestBody GovernanceIssueAssignResponsibleRequest request
@@ -231,6 +246,7 @@ public class GovernanceApiController {
      */
     @Deprecated
     @PostMapping("/issues/{id}/assign")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','ANALYST')")
     public ResponseEntity<GovernanceIssueResponse> assignIssue(
             @PathVariable Long id,
             @RequestBody GovernanceIssueAssignRequest request
@@ -250,6 +266,7 @@ public class GovernanceApiController {
      * PUT /api/v1/governance/issues/{id}/status
      */
     @PutMapping("/issues/{id}/status")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','ANALYST') or (hasRole('AGENT') and @issueAccessService.isAssignedToCurrentUser(#id))")
     public ResponseEntity<GovernanceIssueResponse> updateIssueStatusV2(
             @PathVariable Long id,
             @RequestBody GovernanceIssueStatusUpdateRequest request
@@ -271,6 +288,7 @@ public class GovernanceApiController {
      */
     @Deprecated
     @PatchMapping("/issues/{id}/status")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','ANALYST') or (hasRole('AGENT') and @issueAccessService.isAssignedToCurrentUser(#id))")
     public ResponseEntity<GovernanceIssueStatusResponse> updateIssueStatus(
             @PathVariable Long id,
             @RequestBody GovernanceIssueStatusUpdateRequest request
@@ -294,6 +312,7 @@ public class GovernanceApiController {
      */
     @Deprecated
     @PostMapping("/issues/{id}/status")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','ANALYST') or (hasRole('AGENT') and @issueAccessService.isAssignedToCurrentUser(#id))")
     public ResponseEntity<GovernanceIssueStatusResponse> updateIssueStatusPost(
             @PathVariable Long id,
             @RequestBody GovernanceIssueStatusUpdateRequest request
@@ -305,6 +324,7 @@ public class GovernanceApiController {
      * POST /api/v1/governance/issues/{id}/ignore
      */
     @PostMapping("/issues/{id}/ignore")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','ANALYST') or (hasRole('AGENT') and @issueAccessService.isAssignedToCurrentUser(#id))")
     public ResponseEntity<GovernanceIssueStatusResponse> ignoreIssue(
             @PathVariable Long id,
             @RequestBody GovernanceIssueIgnoreRequest request
@@ -324,6 +344,7 @@ public class GovernanceApiController {
      */
     @GetMapping("/issues/{id}/history")
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','ANALYST') or (hasRole('AGENT') and @issueAccessService.isAssignedToCurrentUser(#id))")
     public ResponseEntity<GovernanceIssueHistoryListResponse> getIssueHistory(@PathVariable Long id) {
         var history = workflowService.getHistory(id).stream()
                 .map(item -> new GovernanceIssueHistoryItemResponse(
@@ -343,6 +364,7 @@ public class GovernanceApiController {
      */
     @GetMapping("/issues/{id}")
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','ANALYST') or (hasRole('AGENT') and @issueAccessService.isAssignedToCurrentUser(#id))")
     public ResponseEntity<GovernanceIssueResponse> getIssue(@PathVariable Long id) {
         return ResponseEntity.ok(getIssueResponse(id));
     }
@@ -352,6 +374,7 @@ public class GovernanceApiController {
      */
     @GetMapping("/overview")
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','ANALYST')")
     public ResponseEntity<GovernanceOverviewResponse> getOverview() {
         return ResponseEntity.ok(overviewService.getOverview());
     }
@@ -561,6 +584,24 @@ public class GovernanceApiController {
             return null;
         }
         return systemCode.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private boolean isAgent() {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null) {
+            return false;
+        }
+        return auth.getAuthorities().contains(new SimpleGrantedAuthority("ROLE_AGENT"));
+    }
+
+    private String resolveAgentId() {
+        Long userId = SecurityUtils.currentUserId();
+        if (userId == null) {
+            return null;
+        }
+        return userRepository.findById(userId)
+                .map(user -> user.getAgentId())
+                .orElse(null);
     }
 
     private GovernanceResponsibleType parseResponsibleType(String responsibleType) {
