@@ -1,10 +1,12 @@
 package br.com.consisa.gov.kb.controller.api;
 
 import br.com.consisa.gov.kb.controller.api.dto.*;
+import br.com.consisa.gov.kb.dto.GovernanceLabelDto;
 import br.com.consisa.gov.kb.domain.KbGovernanceIssueType;
 import br.com.consisa.gov.kb.repository.KbArticleRepository;
 import br.com.consisa.gov.kb.repository.KbGovernanceIssueRepository;
 import br.com.consisa.gov.kb.repository.KbManualTaskRepository;
+import br.com.consisa.gov.kb.service.GovernanceLanguageService;
 import br.com.consisa.gov.kb.service.KbManualTaskService;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
@@ -28,17 +30,20 @@ public class GovernanceTasksApiController {
     private final KbManualTaskRepository taskRepository;
     private final KbGovernanceIssueRepository issueRepository;
     private final KbArticleRepository articleRepository;
+    private final GovernanceLanguageService languageService;
 
     public GovernanceTasksApiController(
             KbManualTaskService taskService,
             KbManualTaskRepository taskRepository,
             KbGovernanceIssueRepository issueRepository,
-            KbArticleRepository articleRepository
+            KbArticleRepository articleRepository,
+            GovernanceLanguageService languageService
     ) {
         this.taskService = taskService;
         this.taskRepository = taskRepository;
         this.issueRepository = issueRepository;
         this.articleRepository = articleRepository;
+        this.languageService = languageService;
     }
 
     /**
@@ -158,14 +163,14 @@ public class GovernanceTasksApiController {
         long articlesWithOpenIssues = issueRepository.countDistinctArticlesWithOpenIssues();
         long articlesOk = Math.max(0, totalArticles - articlesWithOpenIssues);
         long openIssues = issueRepository.countOpenIssues();
-        Map<String, Long> issuesByType = buildIssuesByType();
+        List<GovernanceSummaryResponse.IssueTypeSummary> issuesByType = buildIssuesByType();
 
         var riskRows = taskRepository.countByRiskLevel();
         List<GovernanceSummaryResponse.RiskSummary> byRisk = riskRows == null
                 ? List.of()
                 : riskRows.stream()
                     .map(row -> new GovernanceSummaryResponse.RiskSummary(
-                            row.getRiskLevel(),
+                            languageService.riskLevelLabel(row.getRiskLevel()),
                             row.getTotal() != null ? row.getTotal() : 0L
                     ))
                     .collect(Collectors.toList());
@@ -175,7 +180,7 @@ public class GovernanceTasksApiController {
                 ? List.of()
                 : slaRows.stream()
                     .map(row -> new GovernanceSummaryResponse.SlaSummary(
-                            row.getPriority(),
+                            languageService.priorityLabel(row.getPriority()),
                             row.getTotal() != null ? row.getTotal() : 0L
                     ))
                     .collect(Collectors.toList());
@@ -207,7 +212,7 @@ public class GovernanceTasksApiController {
         return ResponseEntity.ok(response);
     }
 
-    private Map<String, Long> buildIssuesByType() {
+    private List<GovernanceSummaryResponse.IssueTypeSummary> buildIssuesByType() {
         Map<String, Long> counts = new LinkedHashMap<>();
         for (KbGovernanceIssueType type : KbGovernanceIssueType.values()) {
             counts.put(type.name(), 0L);
@@ -220,7 +225,12 @@ public class GovernanceTasksApiController {
                 }
             });
         }
-        return counts;
+        return counts.entrySet().stream()
+                .map(entry -> new GovernanceSummaryResponse.IssueTypeSummary(
+                        languageService.issueTypeLabel(entry.getKey()),
+                        entry.getValue()
+                ))
+                .collect(Collectors.toList());
     }
 
     private GovernanceTaskResponse mapRow(KbManualTaskRepository.ManualTaskRow row) {
@@ -228,11 +238,12 @@ public class GovernanceTasksApiController {
             return null;
         }
 
-        List<String> issues = row.getIssueTypes() == null || row.getIssueTypes().isBlank()
+        List<GovernanceLabelDto> issues = row.getIssueTypes() == null || row.getIssueTypes().isBlank()
                 ? List.of()
                 : Arrays.stream(row.getIssueTypes().split(","))
                     .map(String::trim)
                     .filter(s -> !s.isBlank())
+                    .map(languageService::issueTypeLabel)
                     .collect(Collectors.toList());
 
         return new GovernanceTaskResponse(
@@ -243,10 +254,10 @@ public class GovernanceTasksApiController {
                 row.getArticleUrl(),
                 row.getSystemCode(),
                 row.getSystemName(),
-                row.getStatus(),
-                row.getRiskLevel(),
-                row.getPriority(),
-                row.getAssigneeType(),
+                languageService.manualTaskStatusLabel(row.getStatus()),
+                languageService.riskLevelLabel(row.getRiskLevel()),
+                languageService.priorityLabel(row.getPriority()),
+                languageService.manualAssigneeTypeLabel(row.getAssigneeType()),
                 row.getAssigneeId(),
                 toOffsetDateTimeOrNull(row.getDueAt()),
                 toOffsetDateTimeOrNull(row.getLastActionAt()),

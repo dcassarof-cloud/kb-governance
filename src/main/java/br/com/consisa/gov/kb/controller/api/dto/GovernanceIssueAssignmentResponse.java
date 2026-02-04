@@ -1,5 +1,7 @@
 package br.com.consisa.gov.kb.controller.api.dto;
 
+import br.com.consisa.gov.kb.dto.GovernanceLabelDto;
+
 import java.time.OffsetDateTime;
 
 public record GovernanceIssueAssignmentResponse(
@@ -7,7 +9,7 @@ public record GovernanceIssueAssignmentResponse(
         Long issueId,
         String agentId,
         String agentName,
-        String status,
+        GovernanceLabelDto status,
         OffsetDateTime assignedAt,
         OffsetDateTime dueDate
 ) {

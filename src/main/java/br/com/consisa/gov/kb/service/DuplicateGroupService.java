@@ -22,15 +22,18 @@ public class DuplicateGroupService {
     private final KbArticleRepository articleRepository;
     private final KbGovernanceIssueRepository issueRepository;
     private final GovernanceIssueWorkflowService workflowService;
+    private final GovernanceLanguageService languageService;
 
     public DuplicateGroupService(
             KbArticleRepository articleRepository,
             KbGovernanceIssueRepository issueRepository,
-            GovernanceIssueWorkflowService workflowService
+            GovernanceIssueWorkflowService workflowService,
+            GovernanceLanguageService languageService
     ) {
         this.articleRepository = articleRepository;
         this.issueRepository = issueRepository;
         this.workflowService = workflowService;
+        this.languageService = languageService;
     }
 
     @Transactional(readOnly = true)
@@ -61,7 +64,7 @@ public class DuplicateGroupService {
             groups.add(new DuplicateGroupDetailResponse(
                     hash,
                     hash,
-                    status,
+                    languageService.issueStatusLabel(status),
                     articles
             ));
         }

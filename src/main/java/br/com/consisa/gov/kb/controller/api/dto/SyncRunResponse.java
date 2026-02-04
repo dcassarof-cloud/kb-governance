@@ -1,5 +1,7 @@
 package br.com.consisa.gov.kb.controller.api.dto;
 
+import br.com.consisa.gov.kb.dto.GovernanceLabelDto;
+
 import java.time.OffsetDateTime;
 
 /**
@@ -25,8 +27,8 @@ public record SyncRunResponse(
         String id,
         OffsetDateTime startedAt,
         OffsetDateTime finishedAt,
-        String status,
-        String mode,
+        GovernanceLabelDto status,
+        GovernanceLabelDto mode,
         String note,
         Stats stats
 ) {

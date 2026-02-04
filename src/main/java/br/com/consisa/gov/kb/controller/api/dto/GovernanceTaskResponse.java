@@ -1,5 +1,7 @@
 package br.com.consisa.gov.kb.controller.api.dto;
 
+import br.com.consisa.gov.kb.dto.GovernanceLabelDto;
+
 import java.time.OffsetDateTime;
 import java.util.List;
 
@@ -11,13 +13,13 @@ public record GovernanceTaskResponse(
         String manualLink,
         String systemCode,
         String systemName,
-        String status,
-        String riskLevel,
-        String priority,
-        String assigneeType,
+        GovernanceLabelDto status,
+        GovernanceLabelDto riskLevel,
+        GovernanceLabelDto priority,
+        GovernanceLabelDto assigneeType,
         String assigneeId,
         OffsetDateTime dueAt,
         OffsetDateTime lastActionAt,
-        List<String> issues
+        List<GovernanceLabelDto> issues
 ) {
 }

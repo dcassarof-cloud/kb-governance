@@ -7,9 +7,9 @@ import java.time.Instant;
  */
 public record GovernanceIssueDto(
         Long id,
-        String issueType,
-        String severity,
-        String status,
+        GovernanceLabelDto issueType,
+        GovernanceLabelDto severity,
+        GovernanceLabelDto status,
         Long articleId,
         String articleTitle,
         String systemCode,

@@ -18,10 +18,16 @@ public class GovernanceService {
 
     private final KbGovernanceIssueRepository issueRepo;
     private final KbArticleRepository articleRepo;
+    private final GovernanceLanguageService languageService;
 
-    public GovernanceService(KbGovernanceIssueRepository issueRepo, KbArticleRepository articleRepo) {
+    public GovernanceService(
+            KbGovernanceIssueRepository issueRepo,
+            KbArticleRepository articleRepo,
+            GovernanceLanguageService languageService
+    ) {
         this.issueRepo = issueRepo;
         this.articleRepo = articleRepo;
+        this.languageService = languageService;
     }
 
     @Transactional(readOnly = true)
@@ -36,9 +42,9 @@ public class GovernanceService {
         List<GovernanceIssueDto> items = page.getContent().stream()
                 .map(r -> new GovernanceIssueDto(
                         r.getId(),
-                        r.getIssueType(),
-                        r.getSeverity(),
-                        r.getStatus(),
+                        languageService.issueTypeLabel(r.getIssueType()),
+                        languageService.severityLabel(r.getSeverity()),
+                        languageService.issueStatusLabel(r.getStatus()),
                         r.getArticleId(),
                         r.getArticleTitle(),
                         r.getSystemCode(),
@@ -77,7 +83,7 @@ public class GovernanceService {
                         row.getTitle(),
                         row.getSystemCode(),
                         row.getSystemName(),
-                        row.getGovernanceStatus(),
+                        languageService.governanceStatusLabel(row.getGovernanceStatus()),
                         row.getUpdatedAt() != null ? row.getUpdatedAt() : Instant.now(),
                         row.getIssuesCount() != null ? row.getIssuesCount() : 0L
                 ))

@@ -4,6 +4,7 @@ import br.com.consisa.gov.kb.controller.api.dto.ArticleListResponse;
 import br.com.consisa.gov.kb.controller.api.dto.PaginatedResponse;
 import br.com.consisa.gov.kb.domain.KbArticle;
 import br.com.consisa.gov.kb.repository.KbArticleRepository;
+import br.com.consisa.gov.kb.service.GovernanceLanguageService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -31,9 +32,11 @@ public class ArticlesApiController {
     private static final Logger log = LoggerFactory.getLogger(ArticlesApiController.class);
 
     private final KbArticleRepository articleRepo;
+    private final GovernanceLanguageService languageService;
 
-    public ArticlesApiController(KbArticleRepository articleRepo) {
+    public ArticlesApiController(KbArticleRepository articleRepo, GovernanceLanguageService languageService) {
         this.articleRepo = articleRepo;
+        this.languageService = languageService;
     }
 
     /**
@@ -166,7 +169,7 @@ public class ArticlesApiController {
                 article.getSourceUrl(),
                 systemCode,
                 systemName,
-                article.getGovernanceStatus(),
+                languageService.governanceStatusLabel(article.getGovernanceStatus()),
                 article.getUpdatedDate()
         );
     }

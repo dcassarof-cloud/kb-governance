@@ -8,6 +8,7 @@ import br.com.consisa.gov.kb.domain.KbSyncConfig;
 import br.com.consisa.gov.kb.domain.KbSyncRun;
 import br.com.consisa.gov.kb.domain.SyncMode;
 import br.com.consisa.gov.kb.repository.KbSyncRunRepository;
+import br.com.consisa.gov.kb.service.GovernanceLanguageService;
 import br.com.consisa.gov.kb.service.KbSyncOrchestratorService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,13 +37,16 @@ public class SyncApiController {
 
     private final KbSyncOrchestratorService orchestratorService;
     private final KbSyncRunRepository syncRunRepo;
+    private final GovernanceLanguageService languageService;
 
     public SyncApiController(
             KbSyncOrchestratorService orchestratorService,
-            KbSyncRunRepository syncRunRepo
+            KbSyncRunRepository syncRunRepo,
+            GovernanceLanguageService languageService
     ) {
         this.orchestratorService = orchestratorService;
         this.syncRunRepo = syncRunRepo;
+        this.languageService = languageService;
     }
 
     /**
@@ -226,8 +230,8 @@ public class SyncApiController {
                 run.getId().toString(),
                 run.getStartedAt(),
                 run.getFinishedAt(),
-                run.getStatus().name(),
-                run.getMode().name(),
+                languageService.syncRunStatusLabel(run.getStatus()),
+                languageService.syncModeLabel(run.getMode()),
                 run.getNote(),
                 new SyncRunResponse.Stats(
                         run.getSyncedCount() + run.getUpdatedCount(),  // articlesProcessed
@@ -241,7 +245,7 @@ public class SyncApiController {
     private SyncConfigResponse mapConfigToDto(KbSyncConfig config) {
         return new SyncConfigResponse(
                 config.isEnabled(),
-                config.getMode().name(),
+                languageService.syncModeLabel(config.getMode()),
                 config.getIntervalMinutes(),
                 config.getDaysBack()
         );

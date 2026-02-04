@@ -1,5 +1,7 @@
 package br.com.consisa.gov.kb.controller.api.dto;
 
+import br.com.consisa.gov.kb.dto.GovernanceLabelDto;
+
 import java.time.OffsetDateTime;
 
 /**
@@ -24,7 +26,7 @@ public record ArticleListResponse(
         String manualLink,
         String systemCode,
         String systemName,
-        String governanceStatus,
+        GovernanceLabelDto governanceStatus,
         OffsetDateTime updatedAt
 ) {
 }

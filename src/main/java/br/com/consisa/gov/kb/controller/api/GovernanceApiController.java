@@ -24,6 +24,7 @@ import br.com.consisa.gov.kb.repository.KbArticleRepository;
 import br.com.consisa.gov.kb.repository.KbGovernanceIssueRepository;
 import br.com.consisa.gov.kb.service.GovernanceService;
 import br.com.consisa.gov.kb.service.GovernanceAssigneeService;
+import br.com.consisa.gov.kb.service.GovernanceLanguageService;
 import br.com.consisa.gov.kb.service.GovernanceIssueWorkflowService;
 import br.com.consisa.gov.kb.service.GovernanceOverviewService;
 import br.com.consisa.gov.kb.service.IssueTypeMetaRegistry;
@@ -63,6 +64,7 @@ public class GovernanceApiController {
     private final GovernanceAssigneeService assigneeService;
     private final GovernanceOverviewService overviewService;
     private final IssueTypeMetaRegistry issueTypeMetaRegistry;
+    private final GovernanceLanguageService languageService;
 
     public GovernanceApiController(
             KbGovernanceIssueRepository issueRepo,
@@ -71,7 +73,8 @@ public class GovernanceApiController {
             GovernanceIssueWorkflowService workflowService,
             GovernanceAssigneeService assigneeService,
             GovernanceOverviewService overviewService,
-            IssueTypeMetaRegistry issueTypeMetaRegistry
+            IssueTypeMetaRegistry issueTypeMetaRegistry,
+            GovernanceLanguageService languageService
     ) {
         this.issueRepo = issueRepo;
         this.articleRepo = articleRepo;
@@ -80,6 +83,7 @@ public class GovernanceApiController {
         this.assigneeService = assigneeService;
         this.overviewService = overviewService;
         this.issueTypeMetaRegistry = issueTypeMetaRegistry;
+        this.languageService = languageService;
     }
 
     /**
@@ -215,7 +219,7 @@ public class GovernanceApiController {
                 assignment.getIssueId(),
                 assignment.getAgentId(),
                 assignment.getAgentName(),
-                assignment.getStatus().name(),
+                languageService.assignmentStatusLabel(assignment.getStatus()),
                 assignment.getAssignedAt(),
                 assignment.getDueDate()
         ));
@@ -243,7 +247,7 @@ public class GovernanceApiController {
                 assignment.getIssueId(),
                 assignment.getAgentId(),
                 assignment.getAgentName(),
-                assignment.getStatus().name(),
+                languageService.assignmentStatusLabel(assignment.getStatus()),
                 assignment.getAssignedAt(),
                 assignment.getDueDate()
         ));
@@ -266,7 +270,10 @@ public class GovernanceApiController {
             throw new ResponseStatusException(BAD_REQUEST, "Motivo é obrigatório para IGNORED.");
         }
         var issue = workflowService.updateStatus(id, newStatus, request.actor(), request.ignoredReason());
-        return ResponseEntity.ok(new GovernanceIssueStatusResponse(issue.getId(), issue.getStatus().name()));
+        return ResponseEntity.ok(new GovernanceIssueStatusResponse(
+                issue.getId(),
+                languageService.issueStatusLabel(issue.getStatus())
+        ));
     }
 
     /**
@@ -286,7 +293,10 @@ public class GovernanceApiController {
             throw new ResponseStatusException(BAD_REQUEST, "Use /ignore com motivo obrigatório.");
         }
         var issue = workflowService.updateStatus(id, newStatus, request.actor(), null);
-        return ResponseEntity.ok(new GovernanceIssueStatusResponse(issue.getId(), issue.getStatus().name()));
+        return ResponseEntity.ok(new GovernanceIssueStatusResponse(
+                issue.getId(),
+                languageService.issueStatusLabel(issue.getStatus())
+        ));
     }
 
     /**
@@ -313,7 +323,10 @@ public class GovernanceApiController {
             throw new ResponseStatusException(BAD_REQUEST, "Motivo é obrigatório");
         }
         var issue = workflowService.ignoreIssue(id, request.reason(), request.actor());
-        return ResponseEntity.ok(new GovernanceIssueStatusResponse(issue.getId(), issue.getStatus().name()));
+        return ResponseEntity.ok(new GovernanceIssueStatusResponse(
+                issue.getId(),
+                languageService.issueStatusLabel(issue.getStatus())
+        ));
     }
 
     /**
@@ -427,9 +440,9 @@ public class GovernanceApiController {
         var meta = resolveIssueTypeMeta(row.getIssueType());
         return new GovernanceIssueResponse(
                 row.getId(),
-                row.getIssueType() != null ? row.getIssueType() : "UNKNOWN",
-                row.getSeverity() != null ? row.getSeverity() : "WARN",
-                row.getStatus() != null ? row.getStatus() : "OPEN",
+                languageService.issueTypeLabel(row.getIssueType()),
+                languageService.severityLabel(row.getSeverity()),
+                languageService.issueStatusLabel(row.getStatus()),
                 row.getArticleId(),
                 row.getArticleTitle(),
                 row.getSystemCode(),
@@ -442,7 +455,7 @@ public class GovernanceApiController {
                 toOffsetDateTimeOrNull(row.getDueDate()),
                 message,
                 row.getResponsibleId(),
-                row.getResponsibleType(),
+                languageService.responsibleTypeLabel(row.getResponsibleType()),
                 toOffsetDateTimeOrNull(row.getSlaDueAt()),
                 toOffsetDateTimeOrNull(row.getResolvedAt()),
                 row.getIgnoredReason(),
@@ -481,9 +494,9 @@ public class GovernanceApiController {
         var meta = issueTypeMetaRegistry.getMeta(issue.getIssueType());
         return new GovernanceIssueResponse(
                 issue.getId(),
-                issue.getIssueType().name(),
-                issue.getSeverity().name(),
-                issue.getStatus().name(),
+                languageService.issueTypeLabel(issue.getIssueType()),
+                languageService.severityLabel(issue.getSeverity()),
+                languageService.issueStatusLabel(issue.getStatus()),
                 issue.getArticleId(),
                 articleTitle,
                 systemCode,
@@ -496,7 +509,7 @@ public class GovernanceApiController {
                 null,
                 details,
                 issue.getResponsibleId(),
-                issue.getResponsibleType() != null ? issue.getResponsibleType().name() : null,
+                languageService.responsibleTypeLabel(issue.getResponsibleType()),
                 issue.getSlaDueAt(),
                 issue.getResolvedAt(),
                 issue.getIgnoredReason(),

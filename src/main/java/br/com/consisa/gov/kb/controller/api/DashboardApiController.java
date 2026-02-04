@@ -4,6 +4,7 @@ import br.com.consisa.gov.kb.controller.api.dto.DashboardSummaryResponse;
 import br.com.consisa.gov.kb.repository.KbArticleRepository;
 import br.com.consisa.gov.kb.repository.KbGovernanceIssueRepository;
 import br.com.consisa.gov.kb.repository.KbSystemRepository;
+import br.com.consisa.gov.kb.service.GovernanceLanguageService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -29,15 +30,18 @@ public class DashboardApiController {
     private final KbArticleRepository articleRepo;
     private final KbGovernanceIssueRepository issueRepo;
     private final KbSystemRepository systemRepo;
+    private final GovernanceLanguageService languageService;
 
     public DashboardApiController(
             KbArticleRepository articleRepo,
             KbGovernanceIssueRepository issueRepo,
-            KbSystemRepository systemRepo
+            KbSystemRepository systemRepo,
+            GovernanceLanguageService languageService
     ) {
         this.articleRepo = articleRepo;
         this.issueRepo = issueRepo;
         this.systemRepo = systemRepo;
+        this.languageService = languageService;
     }
 
     /**
@@ -90,8 +94,8 @@ public class DashboardApiController {
 
         // 6. Por status (baseado em artigos distintos, não total de issues)
         List<DashboardSummaryResponse.ByStatus> byStatus = List.of(
-                new DashboardSummaryResponse.ByStatus("OK", articlesOk),
-                new DashboardSummaryResponse.ByStatus("WITH_ISSUES", articlesWithIssues)
+                new DashboardSummaryResponse.ByStatus(languageService.governanceStatusLabel("OK"), articlesOk),
+                new DashboardSummaryResponse.ByStatus(languageService.governanceStatusLabel("WITH_ISSUES"), articlesWithIssues)
         );
 
         DashboardSummaryResponse response = new DashboardSummaryResponse(
