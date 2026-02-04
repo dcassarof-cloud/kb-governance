@@ -89,7 +89,7 @@ public class SyncApiController {
      *
      * Body (opcional):
      * {
-     *   "mode": "DELTA_WINDOW",
+     *   "mode": "DELTA",
      *   "daysBack": 2,
      *   "note": "Sync manual"
      * }
@@ -101,16 +101,16 @@ public class SyncApiController {
         log.info("POST /api/v1/sync/runs");
 
         try {
-            SyncMode mode = SyncMode.DELTA_WINDOW;
+            SyncMode mode = SyncMode.DELTA;
             Integer daysBack = null;
 
             if (request != null) {
                 if (request.mode() != null) {
-                    // ✅ FIX: Converte INCREMENTAL para DELTA_WINDOW
+                    // ✅ FIX: Converte INCREMENTAL/DELTA_WINDOW para DELTA
                     String modeStr = request.mode().toUpperCase();
-                    if ("INCREMENTAL".equals(modeStr)) {
-                        mode = SyncMode.DELTA_WINDOW;
-                        log.info("🔄 Convertendo mode INCREMENTAL → DELTA_WINDOW");
+                    if ("INCREMENTAL".equals(modeStr) || "DELTA_WINDOW".equals(modeStr)) {
+                        mode = SyncMode.DELTA;
+                        log.info("🔄 Convertendo mode {} → DELTA", modeStr);
                     } else {
                         mode = SyncMode.valueOf(modeStr);
                     }
@@ -233,7 +233,7 @@ public class SyncApiController {
      * Body:
      * {
      *   "enabled": true,
-     *   "mode": "DELTA_WINDOW",
+     *   "mode": "DELTA",
      *   "intervalMinutes": 60,
      *   "daysBack": 2
      * }
@@ -245,11 +245,11 @@ public class SyncApiController {
         log.info("PUT /api/v1/sync/config");
 
         try {
-            // ✅ FIX: Converte INCREMENTAL para DELTA_WINDOW
+            // ✅ FIX: Converte INCREMENTAL/DELTA_WINDOW para DELTA
             String modeStr = request.mode().toUpperCase();
-            if ("INCREMENTAL".equals(modeStr)) {
-                modeStr = "DELTA_WINDOW";
-                log.info("🔄 Convertendo mode INCREMENTAL → DELTA_WINDOW");
+            if ("INCREMENTAL".equals(modeStr) || "DELTA_WINDOW".equals(modeStr)) {
+                modeStr = "DELTA";
+                log.info("🔄 Convertendo mode {} → DELTA", request.mode());
             }
 
             KbSyncConfig config = new KbSyncConfig();
@@ -305,12 +305,12 @@ public class SyncApiController {
 
     private SyncMode parseMode(String mode) {
         if (mode == null || mode.isBlank()) {
-            return SyncMode.DELTA_WINDOW;
+            return SyncMode.DELTA;
         }
         String normalized = mode.trim().toUpperCase();
         return switch (normalized) {
             case "FULL" -> SyncMode.FULL;
-            case "INCREMENTAL", "DELTA", "DELTA_WINDOW" -> SyncMode.DELTA_WINDOW;
+            case "INCREMENTAL", "DELTA", "DELTA_WINDOW" -> SyncMode.DELTA;
             default -> throw new org.springframework.web.server.ResponseStatusException(
                     BAD_REQUEST, "Modo inválido: " + mode
             );
@@ -333,7 +333,7 @@ public class SyncApiController {
         if (mode == null) {
             return null;
         }
-        return mode == SyncMode.DELTA_WINDOW ? "DELTA" : mode.name();
+        return mode == SyncMode.DELTA ? "DELTA" : mode.name();
     }
 
     private String normalizeStatus(SyncRunStatus status) {

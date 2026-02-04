@@ -34,7 +34,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * MODOS DE SYNC:
  * --------------
  * - FULL: Varre tudo (usar só 1x ou reprocessamento)
- * - DELTA_WINDOW: Busca artigos alterados nos últimos N dias
+ * - DELTA: Busca artigos alterados nos últimos N dias
  * - DELTA_SMART: Delta cirúrgico (só baixa se detectar mudança)
  */
 @Service
@@ -90,7 +90,7 @@ public class KbSyncOrchestratorService {
         KbSyncConfig cfg = configRepo.findById(1L).orElseGet(KbSyncConfig::new);
 
         cfg.setEnabled(incoming.isEnabled());
-        cfg.setMode(incoming.getMode() == null ? SyncMode.DELTA_WINDOW : incoming.getMode());
+        cfg.setMode(incoming.getMode() == null ? SyncMode.DELTA : incoming.getMode());
         cfg.setIntervalMinutes(Math.max(1, incoming.getIntervalMinutes()));
         cfg.setDaysBack(Math.max(0, incoming.getDaysBack()));
 
@@ -147,7 +147,7 @@ public class KbSyncOrchestratorService {
             // Executa estratégia de sync
             switch (mode) {
                 case FULL -> counts = runFull(counts);
-                case DELTA_WINDOW -> counts = runDeltaWindow(counts, daysBack);
+                case DELTA -> counts = runDeltaWindow(counts, daysBack);
                 default -> throw new IllegalArgumentException("Modo desconhecido: " + mode);
             }
 
@@ -218,13 +218,13 @@ public class KbSyncOrchestratorService {
     }
 
     /**
-     * DELTA_WINDOW: Busca artigos alterados via query SQL.
+     * DELTA: Busca artigos alterados via query SQL.
      */
     private ResultCounts runDeltaWindow(ResultCounts c, Integer daysBack) {
         OffsetDateTime since = computeSince(daysBack);
         List<Long> ids = articleRepo.findIdsForDeltaSince(since);
 
-        log.info("🟦 DELTA_WINDOW: since={} candidates={}", since, ids.size());
+        log.info("🟦 DELTA: since={} candidates={}", since, ids.size());
 
         for (Long id : ids) {
             try {

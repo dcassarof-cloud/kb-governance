@@ -4,23 +4,36 @@ import java.util.List;
 
 /**
  * DTO genérico de resposta paginada.
- * 
+ *
  * Formato esperado pelo front:
  * {
+ *   "data": [...],
  *   "page": 1,
  *   "size": 10,
- *   "totalElements": 1103,
- *   "totalPages": 111,
- *   "items": [...]
+ *   "total": 1103,
+ *   "totalPages": 111
  * }
- * 
+ *
  * IMPORTANTE: page é 1-based (igual ao front)
  */
 public record PaginatedResponse<T>(
+        List<T> data,
         int page,
         int size,
-        long totalElements,
-        int totalPages,
-        List<T> items
+        long total,
+        int totalPages
 ) {
+    public static <T> PaginatedResponse<T> from(org.springframework.data.domain.Page<T> pageResult,
+                                                int page1Based,
+                                                int size) {
+        int safePage = Math.max(1, page1Based);
+        int safeSize = Math.max(1, size);
+        return new PaginatedResponse<>(
+                pageResult.getContent(),
+                safePage,
+                safeSize,
+                pageResult.getTotalElements(),
+                pageResult.getTotalPages()
+        );
+    }
 }

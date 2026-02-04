@@ -95,11 +95,11 @@ public class ArticlesApiController {
                         .toList();
 
                 PaginatedResponse<ArticleListResponse> response = new PaginatedResponse<>(
+                        items,
                         page,
                         safeSize,
                         totalFiltered,  // total filtrado, não total geral
-                        totalPages,
-                        items
+                        totalPages
                 );
 
                 log.info("✅ Retornando {} artigos filtrados (página {}/{})",
@@ -116,11 +116,11 @@ public class ArticlesApiController {
                         .toList();
 
                 PaginatedResponse<ArticleListResponse> response = new PaginatedResponse<>(
+                        items,
                         page,
                         safeSize,
                         pageResult.getTotalElements(),
-                        pageResult.getTotalPages(),
-                        items
+                        pageResult.getTotalPages()
                 );
 
                 log.info("✅ Retornando {} artigos (página {}/{})",

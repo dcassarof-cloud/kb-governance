@@ -6,7 +6,7 @@ package br.com.consisa.gov.kb.controller.api.dto;
  * Body esperado:
  * {
  *   "enabled": true,
- *   "mode": "DELTA_WINDOW",
+ *   "mode": "DELTA",
  *   "intervalMinutes": 60,
  *   "daysBack": 2
  * }

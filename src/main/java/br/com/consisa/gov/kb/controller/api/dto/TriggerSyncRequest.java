@@ -5,7 +5,7 @@ package br.com.consisa.gov.kb.controller.api.dto;
  * 
  * Body esperado (todos campos opcionais):
  * {
- *   "mode": "DELTA_WINDOW",
+ *   "mode": "DELTA",
  *   "daysBack": 2,
  *   "note": "Sync manual disparado pelo usuário"
  * }

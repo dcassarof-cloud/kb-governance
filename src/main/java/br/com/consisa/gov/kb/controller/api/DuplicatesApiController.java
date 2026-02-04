@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -93,6 +94,14 @@ public class DuplicatesApiController {
             @PathVariable("id") String hash,
             @RequestBody DuplicateGroupPrimaryRequest request
     ) {
+        if (request == null || request.primaryArticleId() == null) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,
+                    "primaryArticleId é obrigatório.");
+        }
+        if (request.actor() == null || request.actor().isBlank()) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,
+                    "actor é obrigatório.");
+        }
         duplicateGroupService.setPrimary(hash, request.primaryArticleId(), request.actor());
         return ResponseEntity.ok().build();
     }

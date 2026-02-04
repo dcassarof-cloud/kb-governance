@@ -13,7 +13,7 @@ import java.time.OffsetDateTime;
  *   "startedAt": "2024-01-19T10:30:00Z",
  *   "finishedAt": "2024-01-19T10:35:00Z",
  *   "status": "SUCCESS",
- *   "mode": "DELTA_WINDOW",
+ *   "mode": "DELTA",
  *   "note": "Sync automático",
  *   "stats": {
  *     "articlesProcessed": 150,

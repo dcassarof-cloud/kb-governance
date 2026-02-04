@@ -13,9 +13,8 @@ public class  KbSyncConfig {
     @Column(nullable = false)
     private boolean enabled = true;
 
-    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
-    private SyncMode mode = SyncMode.DELTA_WINDOW;
+    private SyncMode mode = SyncMode.DELTA;
 
     @Column(name = "interval_minutes", nullable = false)
     private int intervalMinutes = 60;
