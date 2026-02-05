@@ -6,7 +6,7 @@ import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.stereotype.Service;
 
-import java.security.Key;
+import javax.crypto.SecretKey;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -18,7 +18,7 @@ import java.nio.charset.StandardCharsets;
 public class JwtService {
 
     private final JwtProperties properties;
-    private final Key signingKey;
+    private final SecretKey signingKey;
 
     public JwtService(JwtProperties properties) {
         this.properties = properties;

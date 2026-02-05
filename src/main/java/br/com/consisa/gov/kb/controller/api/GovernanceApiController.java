@@ -141,6 +141,8 @@ public class GovernanceApiController {
                 null,
                 null,
                 null,
+                null,
+                null,
                 request
         );
     }
@@ -256,7 +258,7 @@ public class GovernanceApiController {
         }
 
         log.info("✅ Retornando {} issues (página {}/{})",
-                response.items().size(), page, response.totalPages());
+                response.data().size(), page, response.totalPages());
 
         return ResponseEntity.ok(response);
     }
