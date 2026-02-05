@@ -7,4 +7,6 @@ import java.util.Optional;
 
 public interface DetectedNeedRepository extends JpaRepository<DetectedNeed, Long> {
     Optional<DetectedNeed> findByClusterIdAndRuleId(Long clusterId, Long ruleId);
+
+    long countByStatus(String status);
 }

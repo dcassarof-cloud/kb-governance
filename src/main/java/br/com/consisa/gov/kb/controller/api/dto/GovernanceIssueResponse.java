@@ -36,6 +36,8 @@ public record GovernanceIssueResponse(
         String severity,
         String responsibleType,
         String responsibleId,
+        int priorityScore,
+        String priorityLevel,
         OffsetDateTime slaDueAt,
         boolean overdue,
         OffsetDateTime createdAt,

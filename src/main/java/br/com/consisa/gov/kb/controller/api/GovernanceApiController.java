@@ -12,11 +12,14 @@ import br.com.consisa.gov.kb.controller.api.dto.GovernanceOverviewResponse;
 import br.com.consisa.gov.kb.controller.api.dto.PaginatedResponse;
 import br.com.consisa.gov.kb.controller.api.dto.ResponsibleSummaryDto;
 import br.com.consisa.gov.kb.controller.api.dto.SuggestedAssigneeResponse;
+import br.com.consisa.gov.kb.controller.api.dto.GovernanceManagementDashboardResponse;
+import br.com.consisa.gov.kb.controller.api.dto.GovernanceWorkloadResponse;
 import br.com.consisa.gov.kb.dto.DuplicateGroupDto;
 import br.com.consisa.gov.kb.dto.GovernanceManualDto;
 import br.com.consisa.gov.kb.domain.GovernanceSeverity;
 import br.com.consisa.gov.kb.domain.GovernanceIssueStatus;
 import br.com.consisa.gov.kb.domain.GovernanceResponsibleType;
+import br.com.consisa.gov.kb.domain.GovernancePriorityLevel;
 import br.com.consisa.gov.kb.domain.KbArticle;
 import br.com.consisa.gov.kb.domain.KbGovernanceIssue;
 import br.com.consisa.gov.kb.domain.KbGovernanceIssueType;
@@ -28,6 +31,8 @@ import br.com.consisa.gov.kb.security.SecurityUtils;
 import br.com.consisa.gov.kb.service.GovernanceService;
 import br.com.consisa.gov.kb.service.GovernanceAssigneeService;
 import br.com.consisa.gov.kb.service.GovernanceLanguageService;
+import br.com.consisa.gov.kb.service.GovernanceManagementService;
+import br.com.consisa.gov.kb.service.GovernanceIssuePriorityService;
 import br.com.consisa.gov.kb.service.GovernanceIssueWorkflowService;
 import br.com.consisa.gov.kb.service.GovernanceOverviewService;
 import br.com.consisa.gov.kb.service.IssueTypeMetaRegistry;
@@ -44,6 +49,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -74,6 +80,8 @@ public class GovernanceApiController {
     private final GovernanceOverviewService overviewService;
     private final IssueTypeMetaRegistry issueTypeMetaRegistry;
     private final GovernanceLanguageService languageService;
+    private final GovernanceManagementService managementService;
+    private final GovernanceIssuePriorityService priorityService;
     private final KbSystemRepository systemRepository;
     private final AppUserRepository userRepository;
 
@@ -86,6 +94,8 @@ public class GovernanceApiController {
             GovernanceOverviewService overviewService,
             IssueTypeMetaRegistry issueTypeMetaRegistry,
             GovernanceLanguageService languageService,
+            GovernanceManagementService managementService,
+            GovernanceIssuePriorityService priorityService,
             KbSystemRepository systemRepository,
             AppUserRepository userRepository
     ) {
@@ -97,6 +107,8 @@ public class GovernanceApiController {
         this.overviewService = overviewService;
         this.issueTypeMetaRegistry = issueTypeMetaRegistry;
         this.languageService = languageService;
+        this.managementService = managementService;
+        this.priorityService = priorityService;
         this.systemRepository = systemRepository;
         this.userRepository = userRepository;
     }
@@ -141,6 +153,8 @@ public class GovernanceApiController {
      * FILTROS SUPORTADOS (Sprint 2):
      * - type: INCOMPLETE_CONTENT, DUPLICATE_CONTENT, OUTDATED_CONTENT, INCONSISTENT_CONTENT
      * - status: OPEN, IN_PROGRESS, RESOLVED
+     * - priorityLevel: LOW, MEDIUM, HIGH, CRITICAL
+     * - overdueOnly=true
      *
      * REGRAS:
      * - page é 1-based (converte para 0-based internamente)
@@ -165,12 +179,14 @@ public class GovernanceApiController {
             @RequestParam(required = false) String responsibleType,
             @RequestParam(required = false) String responsibleId,
             @RequestParam(required = false) Boolean overdue,
+            @RequestParam(required = false) Boolean overdueOnly,
             @RequestParam(required = false) Boolean unassigned,
+            @RequestParam(required = false) String priorityLevel,
             HttpServletRequest request
     ) {
         String requestId = resolveRequestId(request);
-        log.info("GET /api/v1/governance/issues requestId={} page={} size={} type={} issueType={} status={} systemCode={} assigned={}",
-                requestId, page, size, type, issueType, status, systemCode, assigned);
+        log.info("GET /api/v1/governance/issues requestId={} page={} size={} type={} issueType={} status={} systemCode={} assigned={} priorityLevel={}",
+                requestId, page, size, type, issueType, status, systemCode, assigned, priorityLevel);
 
         // Converte page de 1-based para 0-based
         int pageIndex = Math.max(0, page - 1);
@@ -190,6 +206,8 @@ public class GovernanceApiController {
                 : ((rawAssigned != null && !rawAssigned.isBlank()) ? rawAssigned : null);
         String filterResponsibleType = (responsibleType != null && !responsibleType.isBlank()) ? responsibleType : null;
         String filterQuery = (query != null && !query.isBlank()) ? query.trim() : null;
+        Boolean filterOverdue = overdueOnly != null ? overdueOnly : overdue;
+        GovernancePriorityLevel parsedPriorityLevel = parsePriorityLevel(priorityLevel);
 
         if (filterSystemCode != null && systemRepository.findByCode(filterSystemCode).isEmpty()) {
             throw new ResponseStatusException(BAD_REQUEST, "systemCode inválido");
@@ -199,22 +217,46 @@ public class GovernanceApiController {
             filterResponsible = resolveAgentId();
         }
 
-        var pageResult = (filterType != null || filterStatus != null || filterSeverity != null
-                || filterSystemCode != null || filterResponsible != null || filterResponsibleType != null
-                || filterQuery != null || Boolean.TRUE.equals(overdue) || Boolean.TRUE.equals(unassigned))
-                ? issueRepo.pageIssuesFiltered(pageable, filterType, filterSeverity, filterStatus, filterSystemCode,
-                filterResponsible, filterResponsibleType, filterQuery, overdue, unassigned)
-                : issueRepo.pageIssues(pageable);
+        PaginatedResponse<GovernanceIssueResponse> response;
 
-        log.info("📊 Total de issues (filtros: type={}, status={}, system={}, assigned={}): {}",
-                filterType, filterStatus, filterSystemCode, filterResponsible, pageResult.getTotalElements());
+        if (parsedPriorityLevel != null) {
+            List<KbGovernanceIssueRepository.IssueRow> rows = (filterType != null || filterStatus != null || filterSeverity != null
+                    || filterSystemCode != null || filterResponsible != null || filterResponsibleType != null
+                    || filterQuery != null || Boolean.TRUE.equals(filterOverdue) || Boolean.TRUE.equals(unassigned))
+                    ? issueRepo.listIssuesFiltered(filterType, filterSeverity, filterStatus, filterSystemCode,
+                    filterResponsible, filterResponsibleType, filterQuery, filterOverdue, unassigned)
+                    : issueRepo.listIssuesFiltered(null, null, null, null, null, null, null, null, null);
 
-        // Mapeia para DTO com tratamento robusto
-        var mappedPage = pageResult.map(this::mapIssueRowToDto);
-        PaginatedResponse<GovernanceIssueResponse> response = PaginatedResponse.from(mappedPage, page, safeSize);
+            List<GovernanceIssueResponse> mapped = rows.stream()
+                    .map(this::mapIssueRowToDto)
+                    .filter(item -> parsedPriorityLevel.name().equals(item.priorityLevel()))
+                    .toList();
+
+            int fromIndex = Math.min(mapped.size(), pageIndex * safeSize);
+            int toIndex = Math.min(mapped.size(), fromIndex + safeSize);
+            List<GovernanceIssueResponse> pageItems = fromIndex <= toIndex
+                    ? new ArrayList<>(mapped.subList(fromIndex, toIndex))
+                    : List.of();
+            int totalPages = (int) Math.ceil((double) mapped.size() / safeSize);
+            response = new PaginatedResponse<>(pageItems, page, safeSize, mapped.size(), totalPages);
+            log.info("📊 Total de issues (filtros com prioridade): {}", mapped.size());
+        } else {
+            var pageResult = (filterType != null || filterStatus != null || filterSeverity != null
+                    || filterSystemCode != null || filterResponsible != null || filterResponsibleType != null
+                    || filterQuery != null || Boolean.TRUE.equals(filterOverdue) || Boolean.TRUE.equals(unassigned))
+                    ? issueRepo.pageIssuesFiltered(pageable, filterType, filterSeverity, filterStatus, filterSystemCode,
+                    filterResponsible, filterResponsibleType, filterQuery, filterOverdue, unassigned)
+                    : issueRepo.pageIssues(pageable);
+
+            log.info("📊 Total de issues (filtros: type={}, status={}, system={}, assigned={}): {}",
+                    filterType, filterStatus, filterSystemCode, filterResponsible, pageResult.getTotalElements());
+
+            var mappedPage = pageResult.map(this::mapIssueRowToDto);
+            response = PaginatedResponse.from(mappedPage, page, safeSize);
+        }
 
         log.info("✅ Retornando {} issues (página {}/{})",
-                mappedPage.getNumberOfElements(), page, pageResult.getTotalPages());
+                response.items().size(), page, response.totalPages());
 
         return ResponseEntity.ok(response);
     }
@@ -380,6 +422,28 @@ public class GovernanceApiController {
     }
 
     /**
+     * GET /api/v1/governance/dashboard
+     */
+    @GetMapping("/dashboard")
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
+    public ResponseEntity<GovernanceManagementDashboardResponse> getManagementDashboard() {
+        log.info("GET /api/v1/governance/dashboard");
+        return ResponseEntity.ok(managementService.buildDashboard());
+    }
+
+    /**
+     * GET /api/v1/governance/workload
+     */
+    @GetMapping("/workload")
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
+    public ResponseEntity<List<GovernanceWorkloadResponse>> getWorkload() {
+        log.info("GET /api/v1/governance/workload");
+        return ResponseEntity.ok(managementService.buildWorkload());
+    }
+
+    /**
      * GET /api/v1/governance/manuals?page=1&size=10&system=CONSISANET&status=OK&q=texto
      *
      * 📋 Lista manuais/artigos para tela de governança.
@@ -465,6 +529,7 @@ public class GovernanceApiController {
     private GovernanceIssueResponse mapIssueRowToDto(KbGovernanceIssueRepository.IssueRow row) {
         var meta = resolveIssueTypeMeta(row.getIssueType());
         OffsetDateTime slaDueAt = toOffsetDateTimeOrNull(row.getSlaDueAt());
+        var assessment = priorityService.assess(row.getSeverity(), row.getIssueType(), row.getStatus(), slaDueAt);
         return new GovernanceIssueResponse(
                 row.getId(),
                 row.getIssueType(),
@@ -477,6 +542,8 @@ public class GovernanceApiController {
                 row.getSeverity(),
                 row.getResponsibleType(),
                 row.getResponsibleId(),
+                assessment.score(),
+                assessment.level().name(),
                 slaDueAt,
                 isOverdue(row.getStatus(), slaDueAt),
                 toOffsetDateTime(row.getCreatedAt()),
@@ -506,6 +573,10 @@ public class GovernanceApiController {
 
         var meta = issueTypeMetaRegistry.getMeta(issue.getIssueType());
         OffsetDateTime slaDueAt = issue.getSlaDueAt();
+        var assessment = priorityService.assess(issue.getSeverity() != null ? issue.getSeverity().name() : null,
+                issue.getIssueType() != null ? issue.getIssueType().name() : null,
+                issue.getStatus() != null ? issue.getStatus().name() : null,
+                slaDueAt);
         return new GovernanceIssueResponse(
                 issue.getId(),
                 issue.getIssueType().name(),
@@ -518,6 +589,8 @@ public class GovernanceApiController {
                 issue.getSeverity().name(),
                 issue.getResponsibleType() != null ? issue.getResponsibleType().name() : null,
                 issue.getResponsibleId(),
+                assessment.score(),
+                assessment.level().name(),
                 slaDueAt,
                 isOverdue(issue.getStatus().name(), slaDueAt),
                 issue.getCreatedAt(),
@@ -576,6 +649,17 @@ public class GovernanceApiController {
             return GovernanceSeverity.valueOf(severity.trim().toUpperCase(Locale.ROOT)).name();
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(BAD_REQUEST, "Severidade inválida: " + severity);
+        }
+    }
+
+    private GovernancePriorityLevel parsePriorityLevel(String priorityLevel) {
+        if (priorityLevel == null || priorityLevel.isBlank()) {
+            return null;
+        }
+        try {
+            return GovernancePriorityLevel.valueOf(priorityLevel.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(BAD_REQUEST, "PriorityLevel inválido: " + priorityLevel);
         }
     }
 
