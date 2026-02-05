@@ -10,6 +10,8 @@ import br.com.consisa.gov.kb.domain.FaqCluster;
 import br.com.consisa.gov.kb.domain.RecurrenceRule;
 import br.com.consisa.gov.kb.repository.DetectedNeedRepository;
 import br.com.consisa.gov.kb.repository.FaqClusterRepository;
+import br.com.consisa.gov.kb.repository.FaqClusterTicketRepository;
+import br.com.consisa.gov.kb.repository.KbSystemRepository;
 import br.com.consisa.gov.kb.repository.RecurrenceRuleRepository;
 import br.com.consisa.gov.kb.service.NeedService;
 import org.slf4j.Logger;
@@ -40,7 +42,9 @@ public class NeedsApiController {
 
     private final DetectedNeedRepository needRepository;
     private final FaqClusterRepository clusterRepository;
+    private final FaqClusterTicketRepository clusterTicketRepository;
     private final RecurrenceRuleRepository ruleRepository;
+    private final KbSystemRepository systemRepository;
     private final NeedService needService;
     private final MovideskTicketService movideskTicketService;
 
@@ -50,13 +54,17 @@ public class NeedsApiController {
     public NeedsApiController(
             DetectedNeedRepository needRepository,
             FaqClusterRepository clusterRepository,
+            FaqClusterTicketRepository clusterTicketRepository,
             RecurrenceRuleRepository ruleRepository,
+            KbSystemRepository systemRepository,
             NeedService needService,
             MovideskTicketService movideskTicketService
     ) {
         this.needRepository = needRepository;
         this.clusterRepository = clusterRepository;
+        this.clusterTicketRepository = clusterTicketRepository;
         this.ruleRepository = ruleRepository;
+        this.systemRepository = systemRepository;
         this.needService = needService;
         this.movideskTicketService = movideskTicketService;
     }
@@ -183,15 +191,21 @@ public class NeedsApiController {
     private NeedResponse mapNeed(DetectedNeed need) {
         FaqCluster cluster = clusterRepository.findById(need.getClusterId()).orElse(null);
         RecurrenceRule rule = ruleRepository.findById(need.getRuleId()).orElse(null);
+        long occurrences = clusterTicketRepository.countByClusterId(need.getClusterId());
+        OffsetDateTime lastOccurrenceAt = clusterTicketRepository.findLatestOccurrenceAtByClusterId(need.getClusterId());
+        if (lastOccurrenceAt == null) {
+            lastOccurrenceAt = need.getLastDetectedAt();
+        }
+        String system = resolveSystemFromCluster(need.getClusterId());
+        String needType = resolveNeedType(rule);
         return new NeedResponse(
                 need.getId(),
-                need.getStatus(),
-                need.getTaskStatus(),
-                need.getLastDetectedAt(),
-                need.getClusterId(),
                 cluster != null ? cluster.getSampleText() : null,
-                need.getRuleId(),
-                rule != null ? rule.getName() : null,
+                system,
+                occurrences,
+                lastOccurrenceAt,
+                need.getStatus(),
+                needType,
                 need.getExternalTicketId()
         );
     }
@@ -201,6 +215,29 @@ public class NeedsApiController {
             return false;
         }
         return subject.toLowerCase(Locale.ROOT).contains(systemCode);
+    }
+
+    private String resolveSystemFromCluster(Long clusterId) {
+        if (clusterId == null) {
+            return null;
+        }
+        String subject = clusterTicketRepository.findLatestSubjectByClusterId(clusterId);
+        if (subject == null || subject.isBlank()) {
+            return null;
+        }
+        String normalizedSubject = subject.toLowerCase(Locale.ROOT);
+        return systemRepository.findByIsActiveTrueOrderByNameAsc().stream()
+                .map(system -> system.getCode())
+                .filter(code -> code != null && normalizedSubject.contains(code.toLowerCase(Locale.ROOT)))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private String resolveNeedType(RecurrenceRule rule) {
+        if (rule == null) {
+            return "OPERATIONAL";
+        }
+        return rule.getThresholdCount() > 1 ? "RECURRING" : "OPERATIONAL";
     }
 
     private String safeMovideskDetails(Exception ex) {

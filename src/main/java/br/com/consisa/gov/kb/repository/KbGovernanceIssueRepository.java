@@ -75,6 +75,18 @@ public interface KbGovernanceIssueRepository extends JpaRepository<KbGovernanceI
     @Query("SELECT COUNT(i) FROM KbGovernanceIssue i")
     long countTotalIssues();
 
+    @Query("SELECT COUNT(i) FROM KbGovernanceIssue i " +
+           "WHERE i.status NOT IN (br.com.consisa.gov.kb.domain.GovernanceIssueStatus.RESOLVED, " +
+           "br.com.consisa.gov.kb.domain.GovernanceIssueStatus.IGNORED) " +
+           "AND i.slaDueAt IS NOT NULL AND i.slaDueAt < CURRENT_TIMESTAMP")
+    long countOverdueOpenIssues();
+
+    @Query("SELECT COUNT(i) FROM KbGovernanceIssue i " +
+           "WHERE i.status NOT IN (br.com.consisa.gov.kb.domain.GovernanceIssueStatus.RESOLVED, " +
+           "br.com.consisa.gov.kb.domain.GovernanceIssueStatus.IGNORED) " +
+           "AND i.responsibleId IS NULL")
+    long countUnassignedOpenIssues();
+
     /**
      * Página de issues já "enriquecida" com artigo e sistema (pro front).
      *
@@ -340,6 +352,208 @@ public interface KbGovernanceIssueRepository extends JpaRepository<KbGovernanceI
 
     @Query("SELECT i.issueType AS issueType, COUNT(i) AS total FROM KbGovernanceIssue i GROUP BY i.issueType")
     List<IssueTypeCountRow> countByIssueType();
+
+    interface StatusCountRow {
+        GovernanceIssueStatus getStatus();
+        Long getTotal();
+    }
+
+    @Query("SELECT i.status AS status, COUNT(i) AS total FROM KbGovernanceIssue i GROUP BY i.status")
+    List<StatusCountRow> countByStatus();
+
+    interface SystemCountRow {
+        String getSystemCode();
+        String getSystemName();
+        Long getTotal();
+    }
+
+    @Query(value = """
+        SELECT
+          COALESCE(s.code, 'UNCLASSIFIED') AS systemCode,
+          COALESCE(s.name, 'Não classificado') AS systemName,
+          COUNT(i.id) AS total
+        FROM kb_governance_issue i
+        JOIN kb_article a ON a.id = i.article_id
+        LEFT JOIN kb_system s ON s.id = a.system_id
+        WHERE a.article_status = 1
+        GROUP BY systemCode, systemName
+        ORDER BY total DESC
+        """, nativeQuery = true)
+    List<SystemCountRow> countBySystem();
+
+    @Query(value = """
+        SELECT
+          i.id                AS id,
+          i.issue_type        AS issueType,
+          i.severity          AS severity,
+          i.status            AS status,
+          i.article_id        AS articleId,
+          a.title             AS articleTitle,
+          COALESCE(s.code,'UNCLASSIFIED') AS systemCode,
+          COALESCE(s.name,'Não classificado') AS systemName,
+          i.message           AS message,
+          i.created_at        AS createdAt,
+          i.updated_at        AS updatedAt,
+          i.responsible_id    AS responsibleId,
+          i.responsible_type  AS responsibleType,
+          i.sla_due_at        AS slaDueAt,
+          i.resolved_at       AS resolvedAt,
+          i.ignored_reason    AS ignoredReason,
+          last_assign.agent_id AS assignedAgentId,
+          last_assign.agent_name AS assignedAgentName,
+          last_assign.due_date AS dueDate
+        FROM kb_governance_issue i
+        JOIN kb_article a ON a.id = i.article_id
+        LEFT JOIN kb_system s ON s.id = a.system_id
+        LEFT JOIN LATERAL (
+            SELECT ia.agent_id, ia.agent_name, ia.due_date
+            FROM kb_governance_issue_assignment ia
+            WHERE ia.issue_id = i.id
+            ORDER BY ia.created_at DESC
+            LIMIT 1
+        ) last_assign ON true
+        WHERE a.article_status = 1
+          AND i.status NOT IN ('RESOLVED', 'IGNORED')
+        ORDER BY
+          CASE
+            WHEN i.status NOT IN ('RESOLVED', 'IGNORED')
+             AND i.sla_due_at IS NOT NULL
+             AND i.sla_due_at < NOW()
+            THEN 0 ELSE 1
+          END,
+          i.sla_due_at ASC NULLS LAST,
+          CASE i.severity
+            WHEN 'ERROR' THEN 3
+            WHEN 'WARN' THEN 2
+            WHEN 'INFO' THEN 1
+            ELSE 0
+          END DESC,
+          i.updated_at DESC
+        """, nativeQuery = true)
+    List<IssueRow> listOpenIssueRows();
+
+    @Query(value = """
+        SELECT
+          i.id                AS id,
+          i.issue_type        AS issueType,
+          i.severity          AS severity,
+          i.status            AS status,
+          i.article_id        AS articleId,
+          a.title             AS articleTitle,
+          COALESCE(s.code,'UNCLASSIFIED') AS systemCode,
+          COALESCE(s.name,'Não classificado') AS systemName,
+          i.message           AS message,
+          i.created_at        AS createdAt,
+          i.updated_at        AS updatedAt,
+          i.responsible_id    AS responsibleId,
+          i.responsible_type  AS responsibleType,
+          i.sla_due_at        AS slaDueAt,
+          i.resolved_at       AS resolvedAt,
+          i.ignored_reason    AS ignoredReason,
+          last_assign.agent_id AS assignedAgentId,
+          last_assign.agent_name AS assignedAgentName,
+          last_assign.due_date AS dueDate
+        FROM kb_governance_issue i
+        JOIN kb_article a ON a.id = i.article_id
+        LEFT JOIN kb_system s ON s.id = a.system_id
+        LEFT JOIN LATERAL (
+            SELECT ia.agent_id, ia.agent_name, ia.due_date
+            FROM kb_governance_issue_assignment ia
+            WHERE ia.issue_id = i.id
+            ORDER BY ia.created_at DESC
+            LIMIT 1
+        ) last_assign ON true
+        WHERE a.article_status = 1
+          AND (:issueType IS NULL OR i.issue_type = :issueType)
+          AND (:severity IS NULL OR i.severity = :severity)
+          AND (:status IS NULL OR i.status = :status)
+          AND (:systemCode IS NULL OR s.code = :systemCode)
+          AND (
+              :query IS NULL
+              OR a.title ILIKE CONCAT('%', :query, '%')
+              OR i.message ILIKE CONCAT('%', :query, '%')
+          )
+          AND (:responsibleType IS NULL OR i.responsible_type = :responsibleType)
+          AND (
+              :responsible IS NULL
+              OR i.responsible_id = :responsible
+          )
+          AND (
+              :unassigned IS NULL
+              OR :unassigned = FALSE
+              OR i.responsible_id IS NULL
+          )
+          AND (
+              :overdue IS NULL
+              OR :overdue = FALSE
+              OR (
+                  i.status NOT IN ('RESOLVED', 'IGNORED')
+                  AND i.sla_due_at IS NOT NULL
+                  AND i.sla_due_at < NOW()
+              )
+          )
+        ORDER BY
+          CASE
+            WHEN i.status NOT IN ('RESOLVED', 'IGNORED')
+             AND i.sla_due_at IS NOT NULL
+             AND i.sla_due_at < NOW()
+            THEN 0 ELSE 1
+          END,
+          i.sla_due_at ASC NULLS LAST,
+          CASE i.severity
+            WHEN 'ERROR' THEN 3
+            WHEN 'WARN' THEN 2
+            WHEN 'INFO' THEN 1
+            ELSE 0
+          END DESC,
+          i.updated_at DESC
+        """,
+            nativeQuery = true)
+    List<IssueRow> listIssuesFiltered(
+            @org.springframework.data.repository.query.Param("issueType") String issueType,
+            @org.springframework.data.repository.query.Param("severity") String severity,
+            @org.springframework.data.repository.query.Param("status") String status,
+            @org.springframework.data.repository.query.Param("systemCode") String systemCode,
+            @org.springframework.data.repository.query.Param("responsible") String responsible,
+            @org.springframework.data.repository.query.Param("responsibleType") String responsibleType,
+            @org.springframework.data.repository.query.Param("query") String query,
+            @org.springframework.data.repository.query.Param("overdue") Boolean overdue,
+            @org.springframework.data.repository.query.Param("unassigned") Boolean unassigned
+    );
+
+    interface WorkloadRow {
+        String getResponsibleId();
+        Long getOpenIssues();
+        Long getOverdueIssues();
+        Double getAvgResolutionSeconds();
+        Long getSystemsHandled();
+    }
+
+    @Query(value = """
+        SELECT
+          i.responsible_id AS responsibleId,
+          COUNT(*) FILTER (
+              WHERE i.status NOT IN ('RESOLVED', 'IGNORED')
+          ) AS openIssues,
+          COUNT(*) FILTER (
+              WHERE i.status NOT IN ('RESOLVED', 'IGNORED')
+                AND i.sla_due_at IS NOT NULL
+                AND i.sla_due_at < NOW()
+          ) AS overdueIssues,
+          AVG(EXTRACT(EPOCH FROM (i.resolved_at - i.created_at))) FILTER (
+              WHERE i.resolved_at IS NOT NULL
+          ) AS avgResolutionSeconds,
+          COUNT(DISTINCT s.code) AS systemsHandled
+        FROM kb_governance_issue i
+        JOIN kb_article a ON a.id = i.article_id
+        LEFT JOIN kb_system s ON s.id = a.system_id
+        WHERE a.article_status = 1
+          AND i.responsible_id IS NOT NULL
+          AND i.responsible_type = 'USER'
+        GROUP BY i.responsible_id
+        ORDER BY i.responsible_id
+        """, nativeQuery = true)
+    List<WorkloadRow> fetchWorkloadRows();
 
     @Query(value = """
         SELECT i.id

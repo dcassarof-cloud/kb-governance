@@ -4,13 +4,12 @@ import java.time.OffsetDateTime;
 
 public record NeedResponse(
         Long id,
+        String title,
+        String system,
+        long occurrences,
+        OffsetDateTime lastOccurrenceAt,
         String status,
-        String taskStatus,
-        OffsetDateTime lastDetectedAt,
-        Long clusterId,
-        String clusterSample,
-        Long ruleId,
-        String ruleName,
+        String needType,
         String externalTicketId
 ) {
 }

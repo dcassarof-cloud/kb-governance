@@ -11,6 +11,24 @@ public interface FaqClusterTicketRepository extends JpaRepository<FaqClusterTick
 
     long countByClusterId(Long clusterId);
 
+    @Query(value = """
+        SELECT st.subject
+        FROM faq_cluster_ticket ct
+        JOIN support_ticket st ON st.id = ct.ticket_id
+        WHERE ct.cluster_id = :clusterId
+        ORDER BY st.origin_created_at DESC NULLS LAST, st.created_at DESC
+        LIMIT 1
+        """, nativeQuery = true)
+    String findLatestSubjectByClusterId(Long clusterId);
+
+    @Query(value = """
+        SELECT COALESCE(MAX(st.origin_created_at), MAX(st.created_at))
+        FROM faq_cluster_ticket ct
+        JOIN support_ticket st ON st.id = ct.ticket_id
+        WHERE ct.cluster_id = :clusterId
+        """, nativeQuery = true)
+    OffsetDateTime findLatestOccurrenceAtByClusterId(Long clusterId);
+
     @Query("""
         SELECT COUNT(ct)
         FROM FaqClusterTicket ct
