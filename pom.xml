@@ -14,7 +14,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.3.4</version>
+        <version>4.0.1</version>
         <relativePath/>
     </parent>
 
@@ -31,6 +31,7 @@
 
         <!-- Versões fixas apenas quando necessário (fora do BOM do Spring) -->
         <jjwt.version>0.12.5</jjwt.version>
+        <springdoc.version>2.8.0</springdoc.version>
     </properties>
 
     <dependencies>
@@ -75,6 +76,13 @@
             <artifactId>jjwt-jackson</artifactId>
             <version>${jjwt.version}</version>
             <scope>runtime</scope>
+        </dependency>
+
+        <!-- OpenAPI / Swagger (Springdoc) -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>${springdoc.version}</version>
         </dependency>
 
         <!-- JPA / Hibernate -->
