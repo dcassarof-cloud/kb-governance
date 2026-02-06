@@ -3,13 +3,17 @@ package br.com.consisa.gov.kb.scheduler;
 import br.com.consisa.gov.kb.domain.KbSyncConfig;
 import br.com.consisa.gov.kb.domain.SyncMode;
 import br.com.consisa.gov.kb.service.KbSyncOrchestratorService;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.core.env.Environment;
 
 import java.time.*;
+import java.util.Arrays;
 
 /**
  * 🕐 VERSÃO 2.0 - Scheduler Melhorado
@@ -44,6 +48,11 @@ import java.time.*;
  */
 @EnableScheduling
 @Component
+@ConditionalOnProperty(
+        name = "app.sync.scheduler.enabled",
+        havingValue = "true",
+        matchIfMissing = false
+)
 public class KbSyncScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(KbSyncScheduler.class);
@@ -62,9 +71,18 @@ public class KbSyncScheduler {
     private int consecutiveFailures = 0;
 
     private final KbSyncOrchestratorService svc;
+    private final Environment environment;
 
-    public KbSyncScheduler(KbSyncOrchestratorService svc) {
+    public KbSyncScheduler(KbSyncOrchestratorService svc, Environment environment) {
         this.svc = svc;
+        this.environment = environment;
+    }
+
+    @jakarta.annotation.PostConstruct
+    void logSchedulerStatus() {
+        String[] profiles = environment.getActiveProfiles();
+        boolean enabled = environment.getProperty("app.sync.scheduler.enabled", Boolean.class, false);
+        log.info("Scheduler KB Sync enabled: {} (profiles={})", enabled, Arrays.toString(profiles));
     }
 
     /**
@@ -76,6 +94,11 @@ public class KbSyncScheduler {
      * - Evitar execução simultânea
      */
     @Scheduled(fixedDelay = 30_000) // checa a cada 30s
+    @SchedulerLock(
+            name = "kbSyncScheduler",
+            lockAtMostFor = "PT10M",
+            lockAtLeastFor = "PT20S"
+    )
     public void tick() {
         try {
             // 1) Carrega config

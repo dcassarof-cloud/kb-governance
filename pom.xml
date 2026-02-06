@@ -35,6 +35,7 @@
         <!-- libs fora do BOM do Spring Boot -->
         <jjwt.version>0.12.6</jjwt.version>
         <springdoc.version>2.8.0</springdoc.version>
+        <shedlock.version>5.15.0</shedlock.version>
     </properties>
 
     <!-- =========================
@@ -94,6 +95,18 @@
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
+        </dependency>
+
+        <!-- SHEDLOCK -->
+        <dependency>
+            <groupId>net.javacrumbs.shedlock</groupId>
+            <artifactId>shedlock-spring</artifactId>
+            <version>${shedlock.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>net.javacrumbs.shedlock</groupId>
+            <artifactId>shedlock-provider-jdbc-template</artifactId>
+            <version>${shedlock.version}</version>
         </dependency>
 
         <!-- JWT (JJWT) -->
