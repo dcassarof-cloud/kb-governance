@@ -9,7 +9,7 @@ import br.com.consisa.gov.kb.service.NeedService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -32,19 +32,19 @@ class NeedsApiControllerTest {
     @Autowired
     private MockMvc mockMvc;
 
-    @MockBean
+    @MockitoBean
     private DetectedNeedRepository detectedNeedRepository;
 
-    @MockBean
+    @MockitoBean
     private FaqClusterRepository faqClusterRepository;
 
-    @MockBean
+    @MockitoBean
     private RecurrenceRuleRepository recurrenceRuleRepository;
 
-    @MockBean
+    @MockitoBean
     private NeedService needService;
 
-    @MockBean
+    @MockitoBean
     private MovideskTicketService movideskTicketService;
 
     @Test
