@@ -50,7 +50,7 @@ Este projeto surge para resolver essas lacunas, criando uma **camada local de co
 ## Stack Tecnológica
 
 - Java 21
-- Spring Boot
+- Spring Boot 4.0.1
 - Spring Web (REST)
 - Spring Data JPA
 - PostgreSQL
@@ -60,6 +60,26 @@ Este projeto surge para resolver essas lacunas, criando uma **camada local de co
 - Maven
 - Postman (testes manuais)
 - IntelliJ IDEA
+
+---
+
+## Requisitos
+
+- Java 21
+- Maven
+
+## Comandos principais
+
+```bash
+mvn -U clean compile
+mvn test
+mvn spring-boot:run
+```
+
+## Nota de migração (Spring Boot 4)
+
+- `@MockBean` foi removido no Boot 4. Use `@MockitoBean` de
+  `org.springframework.test.context.bean.override.mockito.MockitoBean`.
 
 ---
 
