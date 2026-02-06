@@ -10,6 +10,9 @@ app:
       secret: "${JWT_SECRET:change-me-dev-secret-change-me-dev-secret}"
       access-token-minutes: 15
       refresh-token-days: 7
+  sync:
+    scheduler:
+      enabled: "${APP_SYNC_SCHEDULER_ENABLED:true}"
   cors:
     allowed-origins: "${CORS_ALLOWED_ORIGINS:}"
 

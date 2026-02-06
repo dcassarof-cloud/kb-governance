@@ -3,12 +3,15 @@ package br.com.consisa.gov.kb.service;
 import br.com.consisa.gov.kb.controller.api.dto.GovernanceDashboardResponse;
 import br.com.consisa.gov.kb.repository.GovernanceDashboardRepository;
 import br.com.consisa.gov.kb.repository.GovernanceOverviewRepository;
+import br.com.consisa.gov.kb.repository.projection.OverdueIssue;
+import br.com.consisa.gov.kb.repository.projection.SlaComplianceTotals;
+import br.com.consisa.gov.kb.repository.projection.TrendsTotals;
+import br.com.consisa.gov.kb.repository.projection.UnassignedIssue;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigInteger;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.Comparator;
 import java.util.List;
 
@@ -55,9 +58,9 @@ public class GovernanceDashboardService {
         long overdue = toLong(totalsRow, 4);
         long unassigned = toLong(totalsRow, 5);
 
-        Object[] slaRow = dashboardRepository.fetchSlaComplianceTotals();
-        long totalResolved = toLong(slaRow, 0);
-        long resolvedOnTime = toLong(slaRow, 1);
+        SlaComplianceTotals slaTotals = dashboardRepository.fetchSlaComplianceTotals();
+        long totalResolved = slaTotals.totalResolved();
+        long resolvedOnTime = slaTotals.resolvedOnTime();
         double slaCompliancePercent = totalResolved == 0
                 ? 0.0
                 : (resolvedOnTime * 100.0) / totalResolved;
@@ -103,39 +106,24 @@ public class GovernanceDashboardService {
         List<GovernanceDashboardResponse.OverdueIssue> overdueIssues = dashboardRepository
                 .fetchOverdueIssues(MAX_ATTENTION_ITEMS)
                 .stream()
-                .map(row -> new GovernanceDashboardResponse.OverdueIssue(
-                        toLong(row, 0),
-                        asString(row, 1),
-                        asString(row, 2),
-                        asString(row, 3),
-                        asString(row, 4),
-                        toOffsetDateTime(row[5]),
-                        toOffsetDateTime(row[6])
-                ))
+                .map(this::toOverdueIssue)
                 .toList();
 
         List<GovernanceDashboardResponse.UnassignedIssue> unassignedIssues = dashboardRepository
                 .fetchUnassignedIssues(MAX_ATTENTION_ITEMS)
                 .stream()
-                .map(row -> new GovernanceDashboardResponse.UnassignedIssue(
-                        toLong(row, 0),
-                        asString(row, 1),
-                        asString(row, 2),
-                        asString(row, 3),
-                        asString(row, 4),
-                        toOffsetDateTime(row[5])
-                ))
+                .map(this::toUnassignedIssue)
                 .toList();
 
         return new GovernanceDashboardResponse.AttentionLists(overdueIssues, unassignedIssues);
     }
 
     private GovernanceDashboardResponse.Trends buildTrends() {
-        Object[] row = dashboardRepository.fetchTrendsTotals();
-        long opened = toLong(row, 0);
-        long resolved = toLong(row, 1);
-        long overdueLast7 = toLong(row, 2);
-        long overduePrev7 = toLong(row, 3);
+        TrendsTotals totals = dashboardRepository.fetchTrendsTotals();
+        long opened = totals.openedLast7();
+        long resolved = totals.resolvedLast7();
+        long overdueLast7 = totals.overdueLast7();
+        long overduePrev7 = totals.overduePrev7();
         long overdueVariation = overdueLast7 - overduePrev7;
 
         return new GovernanceDashboardResponse.Trends(
@@ -170,19 +158,26 @@ public class GovernanceDashboardService {
         return row[index].toString();
     }
 
-    private OffsetDateTime toOffsetDateTime(Object value) {
-        if (value == null) {
-            return null;
-        }
-        if (value instanceof OffsetDateTime) {
-            return (OffsetDateTime) value;
-        }
-        if (value instanceof java.time.Instant) {
-            return OffsetDateTime.ofInstant((java.time.Instant) value, ZoneOffset.UTC);
-        }
-        if (value instanceof java.time.LocalDateTime) {
-            return ((java.time.LocalDateTime) value).atOffset(ZoneOffset.UTC);
-        }
-        return OffsetDateTime.parse(value.toString());
+    private GovernanceDashboardResponse.OverdueIssue toOverdueIssue(OverdueIssue issue) {
+        return new GovernanceDashboardResponse.OverdueIssue(
+                issue.id(),
+                issue.issueType(),
+                issue.systemCode(),
+                issue.systemName(),
+                issue.severity(),
+                issue.slaDueAt(),
+                issue.createdAt()
+        );
+    }
+
+    private GovernanceDashboardResponse.UnassignedIssue toUnassignedIssue(UnassignedIssue issue) {
+        return new GovernanceDashboardResponse.UnassignedIssue(
+                issue.id(),
+                issue.issueType(),
+                issue.systemCode(),
+                issue.systemName(),
+                issue.severity(),
+                issue.createdAt()
+        );
     }
 }
